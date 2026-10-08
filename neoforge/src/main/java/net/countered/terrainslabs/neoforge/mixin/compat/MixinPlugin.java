@@ -26,7 +26,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
             return LoadingModList.get()
                     .getModFileById("embeddium") != null;
         }
-        if (mixinClassName.contains("MixinSodiumBlockRenderer")) {
+        if (mixinClassName.contains(".compat.MixinSodium")) {
             return LoadingModList.get()
                     .getModFileById("sodium") != null;
         }

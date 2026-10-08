@@ -6,7 +6,8 @@
   "plugin": "net.countered.terrainslabs.neoforge.mixin.compat.MixinPlugin",
   "client": [
     "MixinAmbientOcclusionFace",
-    "MixinModelBlockRenderer"
+    "MixinModelBlockRenderer",
+    "compat.MixinSodiumSnowLighting"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -21,7 +21,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (mixinClassName.contains("MixinSodiumBlockRenderer")) {
+        if (mixinClassName.contains(".compat.MixinSodium")) {
             return net.fabricmc.loader.api.FabricLoader
                     .getInstance()
                     .isModLoaded("sodium");
