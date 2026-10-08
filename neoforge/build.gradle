@@ -21,13 +21,17 @@ unifiedPublishing {
             }
         }
 
-        curseforge {
-            token = System.getenv("CURSEFORGE_TOKEN")
-            id = "1125437"
+        if (System.getenv("CURSEFORGE_TOKEN")) {
+            curseforge {
+                token = System.getenv("CURSEFORGE_TOKEN")
+                id = "1125437"
+            }
         }
-        modrinth {
-            token = System.getenv("MODRINTH_TOKEN")
-            id = "SJu6sklj"
+        if (System.getenv("MODRINTH_TOKEN")) {
+            modrinth {
+                token = System.getenv("MODRINTH_TOKEN")
+                id = "SJu6sklj"
+            }
         }
     }
 }

@@ -20,6 +20,8 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Build Fabric and NeoForge
         run: bash ./gradlew :fabric:build :neoforge:build --no-daemon
       - name: Collect playable jars
