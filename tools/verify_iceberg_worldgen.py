@@ -162,6 +162,7 @@ def main():
         run.mkdir(parents=True, exist_ok=True)
         worlds = [prepare_world(run), prepare_world(Path('run'))]
         log = Path(f'{loader}-iceberg-worldgen.log')
+        saved = False
         with log.open('w') as output:
             process = subprocess.Popen(['bash', './gradlew', f':{loader}:runServer', '--no-daemon', '--console=plain'],
                                        stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
@@ -172,10 +173,16 @@ def main():
                     text = log.read_text()
                     if ')! For help, type' in text:
                         stop_server()
-                        process.wait(timeout=90)
+                        save_deadline = time.monotonic() + 90
+                        while time.monotonic() < save_deadline:
+                            saved = 'All dimensions are saved' in log.read_text()
+                            if saved or process.poll() is not None:
+                                break
+                            time.sleep(1)
+                        assert saved, f'{loader}: server did not finish saving the generated world'
                         break
                     time.sleep(1)
-                assert process.poll() == 0, f'{loader}: server did not generate and save the fixture cleanly'
+                assert saved, f'{loader}: server did not generate and save the fixture cleanly'
             finally:
                 if process.poll() is None:
                     os.killpg(process.pid, signal.SIGTERM)
