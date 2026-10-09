@@ -7,7 +7,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
@@ -131,7 +130,7 @@ public final class IcebergSlabPlacement {
                 || isGeneratedIceSlab(support, packedIce, blueIce, snow)
                 && (support.getValue(SlabBlock.TYPE) == touchingFace || support.getValue(SlabBlock.TYPE) == SlabType.DOUBLE);
         boolean wet = type == SlabType.BOTTOM
-                ? current.getFluidState().is(FluidTags.WATER) || above.is(Blocks.WATER) : false;
+                ? current.is(Blocks.WATER) || above.is(Blocks.WATER) : false;
         boolean waterBeside = false;
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             BlockPos neighborPos = pos.relative(direction);
