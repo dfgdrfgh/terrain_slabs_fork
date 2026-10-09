@@ -104,7 +104,8 @@ def verify_world(directory, loader):
                     unsupported.append((chunk['xPos'] * 16 + index % 16, y,
                                         chunk['zPos'] * 16 + index // 16 % 16, state, support))
     assert chunks >= 25, f'{loader}: insufficient generated chunks: {chunks}'
-    assert counts['packed_ice_slab'] + counts['blue_ice_slab'] > 0, f'{loader}: fixture generated no ice slabs'
+    assert counts['packed_ice_slab'] > 0, f'{loader}: fixture generated no packed ice slabs'
+    assert counts['blue_ice_slab'] > 0, f'{loader}: fixture generated no blue ice slabs'
     assert not unsupported, f'{loader}: {len(unsupported)} unsupported iceberg rims, examples: {unsupported[:10]}'
     print(f'{loader}: {chunks} frozen-ocean chunks, {counts}, zero unsupported iceberg slabs', flush=True)
 
@@ -116,6 +117,15 @@ def prepare_world(run):
     preset = pack / 'data' / 'iceberg_regression' / 'worldgen' / 'world_preset'
     preset.mkdir(parents=True)
     (pack / 'pack.mcmeta').write_text(json.dumps({'pack': {'pack_format': 48, 'description': 'Frozen-ocean regression fixture'}}))
+    # Vanilla blue icebergs occur only once per 200 attempts. Force their frequency in
+    # the test datapack so every run exercises overlapping features of both materials.
+    placed = pack / 'data' / 'minecraft' / 'worldgen' / 'placed_feature'
+    placed.mkdir(parents=True)
+    (placed / 'iceberg_blue.json').write_text(json.dumps({
+        'feature': 'minecraft:iceberg_blue',
+        'placement': [{'type': 'minecraft:rarity_filter', 'chance': 1},
+                      {'type': 'minecraft:in_square'}, {'type': 'minecraft:biome'}],
+    }))
     dimensions = {
         'minecraft:overworld': {'type': 'minecraft:overworld', 'generator': {'type': 'minecraft:noise',
             'settings': 'minecraft:overworld', 'biome_source': {'type': 'minecraft:fixed', 'biome': 'minecraft:deep_frozen_ocean'}}},
