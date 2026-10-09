@@ -177,7 +177,7 @@ def server_command(command):
         return response[8:-2].decode('utf-8')
 
 
-def complete_fixture_chunks():
+def complete_fixture_chunks(log):
     # Force a wider area through prepareTickingChunk, including both iceberg types.
     # Spawn's smaller completed area may contain only packed ice for a given seed.
     print(server_command('forceload add -96 -96 96 96'), flush=True)
@@ -185,7 +185,9 @@ def complete_fixture_chunks():
              'if loaded 96 64 -96 if loaded 96 64 96 run say iceberg-fixture-ready')
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
-        if 'iceberg-fixture-ready' in server_command(check):
+        server_command(check)
+        # /say writes the success marker to the native log, rather than RCON feedback.
+        if 'iceberg-fixture-ready' in log.read_text():
             # Chunk availability precedes its queued ticking/postprocessing task.
             time.sleep(5)
             return
@@ -209,7 +211,7 @@ def main():
                 while process.poll() is None and time.monotonic() < deadline:
                     text = log.read_text()
                     if ')! For help, type' in text:
-                        complete_fixture_chunks()
+                        complete_fixture_chunks(log)
                         server_command('stop')
                         save_deadline = time.monotonic() + 90
                         while time.monotonic() < save_deadline:
