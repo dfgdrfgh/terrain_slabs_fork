@@ -3,7 +3,6 @@ package net.countered.terrainslabs.mixin.feature;
 import net.countered.terrainslabs.block.ModSlabsMap;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
-import net.countered.terrainslabs.util.IceSlabGenerationCleanup;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.block.Blocks;
@@ -16,14 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(WorldGenRegion.class)
 public class WorldGenRegionMixin {
-
-    @Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At("RETURN"))
-    private void terrain_slabs$removeUnsupportedIceSlabs(BlockPos pos, BlockState state, int flags,
-                                                        int recursionLeft, CallbackInfoReturnable<Boolean> cir) {
-        if (cir.getReturnValueZ() && (state.isAir() || state.is(Blocks.WATER))) {
-            IceSlabGenerationCleanup.removeAtSupport((WorldGenRegion) (Object) this, pos);
-        }
-    }
 
     /**
      * fix for grass slabs on village paths

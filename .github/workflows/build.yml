@@ -22,27 +22,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: Inspect vanilla iceberg generation
-        run: |
-          bash ./gradlew :common:genSources --no-daemon
-          python - <<'PY'
-          import os, zipfile
-          found = set()
-          for base in (os.environ['GRADLE_USER_HOME'], '.'):
-              for root, _, files in os.walk(base):
-                  for name in files:
-                      if 'sources' not in name or not name.endswith(('.jar', '.zip')):
-                          continue
-                      with zipfile.ZipFile(os.path.join(root, name)) as archive:
-                          for path in archive.namelist():
-                              if path.endswith('/IcebergFeature.java') or path.endswith('/MappedRegistry.java'):
-                                  if path not in found:
-                                      found.add(path)
-                                      print(archive.read(path).decode())
-          assert any(path.endswith('/IcebergFeature.java') for path in found), 'Minecraft sources not found'
-          PY
-      - name: Test iceberg cleanup and build Fabric and NeoForge
+      - name: Test iceberg slab compatibility and build Fabric and NeoForge
         run: bash ./gradlew :common:test :fabric:build :neoforge:build --no-daemon
+      - name: Verify Fabric and NeoForge mixins load
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess
+          for directory in ('run', 'fabric/run', 'neoforge/run'):
+              path = pathlib.Path(directory)
+              path.mkdir(parents=True, exist_ok=True)
+              (path / 'eula.txt').write_text('eula=false\n')
+          for loader in ('fabric', 'neoforge'):
+              result = subprocess.run(['bash', './gradlew', f':{loader}:runServer', '--no-daemon'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                      text=True, timeout=180)
+              print(result.stdout)
+              pathlib.Path(f'{loader}-startup.log').write_text(result.stdout)
+              assert 'You need to agree to the EULA' in result.stdout, f'{loader} did not reach normal server bootstrap'
+              for error in ('Mixin apply failed', 'InvalidInjectionException', 'InjectionError', 'MixinTransformerError'):
+                  assert error not in result.stdout, f'{loader}: {error}'
+              print(f'{loader}: mixins and registries loaded; stopped before creating a world')
+          PY
       - name: Collect playable jars
         run: |
           mkdir -p artifacts

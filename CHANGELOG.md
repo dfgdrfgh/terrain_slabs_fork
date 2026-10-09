@@ -3,7 +3,7 @@
 ## [3.1.3]
 
 ### Fixed
-- Remove generated packed ice and blue ice slabs when later world-generation features clear their supporting blocks; preserve waterlogging and player-placed slabs.
+- Teach iceberg carving, smoothing and overlapping placement about generated packed ice, blue ice and snow slabs so they remain part of the iceberg geometry instead of being skipped and stranded. Preserve player-placed slabs and account for top slabs hanging from support above.
 
 ## [3.1.2]
 
