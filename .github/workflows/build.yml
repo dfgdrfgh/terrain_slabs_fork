@@ -22,6 +22,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+      - name: Inspect vanilla iceberg generation
+        run: |
+          bash ./gradlew :common:genSources --no-daemon
+          python - <<'PY'
+          import os, zipfile
+          for root, _, files in os.walk(os.environ['GRADLE_USER_HOME']):
+              for name in files:
+                  if not name.endswith('-sources.jar') or 'minecraft' not in name:
+                      continue
+                  with zipfile.ZipFile(os.path.join(root, name)) as archive:
+                      for path in archive.namelist():
+                          if path.endswith('/IcebergFeature.java') or path.endswith('/MappedRegistry.java'):
+                              print(archive.read(path).decode())
+          PY
       - name: Test iceberg cleanup and build Fabric and NeoForge
         run: bash ./gradlew :common:test :fabric:build :neoforge:build --no-daemon
       - name: Collect playable jars
