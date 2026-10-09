@@ -27,14 +27,19 @@ jobs:
           bash ./gradlew :common:genSources --no-daemon
           python - <<'PY'
           import os, zipfile
-          for root, _, files in os.walk(os.environ['GRADLE_USER_HOME']):
-              for name in files:
-                  if not name.endswith('-sources.jar') or 'minecraft' not in name:
-                      continue
-                  with zipfile.ZipFile(os.path.join(root, name)) as archive:
-                      for path in archive.namelist():
-                          if path.endswith('/IcebergFeature.java') or path.endswith('/MappedRegistry.java'):
-                              print(archive.read(path).decode())
+          found = set()
+          for base in (os.environ['GRADLE_USER_HOME'], '.'):
+              for root, _, files in os.walk(base):
+                  for name in files:
+                      if 'sources' not in name or not name.endswith(('.jar', '.zip')):
+                          continue
+                      with zipfile.ZipFile(os.path.join(root, name)) as archive:
+                          for path in archive.namelist():
+                              if path.endswith('/IcebergFeature.java') or path.endswith('/MappedRegistry.java'):
+                                  if path not in found:
+                                      found.add(path)
+                                      print(archive.read(path).decode())
+          assert any(path.endswith('/IcebergFeature.java') for path in found), 'Minecraft sources not found'
           PY
       - name: Test iceberg cleanup and build Fabric and NeoForge
         run: bash ./gradlew :common:test :fabric:build :neoforge:build --no-daemon
