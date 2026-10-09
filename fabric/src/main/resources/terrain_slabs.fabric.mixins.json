@@ -6,7 +6,6 @@
   "plugin": "net.countered.terrainslabs.fabric.mixin.compat.MixinPlugin",
   "client": [
     "MixinAoCalculator",
-    "compat.MixinSodiumSnowLighting",
     "compat.MixinSodiumSnowFaceCulling"
   ],
   "injectors": {

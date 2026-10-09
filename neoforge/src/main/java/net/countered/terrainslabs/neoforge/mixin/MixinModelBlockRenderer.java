@@ -3,15 +3,18 @@ package net.countered.terrainslabs.neoforge.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.countered.terrainslabs.util.AOHelper;
-import net.countered.terrainslabs.util.SnowRenderHelper;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,8 +32,15 @@ public class MixinModelBlockRenderer {
             boolean checkSides, RandomSource rand, long seed, int packedOverlay,
             ModelData modelData, RenderType renderType, CallbackInfo ci) {
 
-        if (!SnowRenderHelper.isOffsetSnow(level, pos, state)) {
-            AOHelper.SNOW_SLAB_POS.remove();
+        if (!(state.getBlock() instanceof SnowLayerBlock)) {
+            AOHelper.SNOW_SLAB_POS.set(null);
+            return;
+        }
+        BlockState belowState = level.getBlockState(pos.below());
+        if (!belowState.is(BlockTags.SLABS)
+                || !belowState.hasProperty(SlabBlock.TYPE)
+                || belowState.getValue(SlabBlock.TYPE) != SlabType.BOTTOM) {
+            AOHelper.SNOW_SLAB_POS.set(null);
             return;
         }
 
@@ -65,16 +75,11 @@ public class MixinModelBlockRenderer {
         int up = Direction.UP.get3DDataValue();
         int len = Direction.values().length;
 
-        shape = shape.clone();
         shape[down] += 0.5f;
         shape[up] += 0.5f;
         shape[down + len] -= 0.5f;
         shape[up + len] -= 0.5f;
 
         return shape;
-    }
-    @Inject(method = "tesselateWithAO*", at = @At("RETURN"))
-    private void terrain_slabs$clearSnowFlag(CallbackInfo ci) {
-        AOHelper.SNOW_SLAB_POS.remove();
     }
 }

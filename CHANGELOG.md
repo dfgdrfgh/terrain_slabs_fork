@@ -1,13 +1,9 @@
 # Changelog
 
-## [3.1.2-tsbwg.2-api-snowfix.1]
-
-### Fixed
-- Correct snow-layer lighting on bottom slabs with Sodium and Embeddium; match lighting eligibility to model offsets and clear NeoForge lighting state between blocks.
-
 ## [3.1.2]
 
 ### Fixed
+- Keep snow-layer side faces visible at slab edges when position-independent culling would hide them, including with Sodium and MoreCulling.
 - fix waterlogged slabs in basalt deltas
 
 ## [3.1.0]

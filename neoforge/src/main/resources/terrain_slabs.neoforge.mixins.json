@@ -7,7 +7,6 @@
   "client": [
     "MixinAmbientOcclusionFace",
     "MixinModelBlockRenderer",
-    "compat.MixinSodiumSnowLighting",
     "compat.MixinSodiumSnowFaceCulling",
     "compat.MixinEmbeddiumSnowFaceCulling"
   ],
