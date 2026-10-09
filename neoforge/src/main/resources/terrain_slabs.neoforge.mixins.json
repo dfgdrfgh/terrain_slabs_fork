@@ -7,7 +7,9 @@
   "client": [
     "MixinAmbientOcclusionFace",
     "MixinModelBlockRenderer",
-    "compat.MixinSodiumSnowLighting"
+    "compat.MixinSodiumSnowLighting",
+    "compat.MixinSodiumSnowFaceCulling",
+    "compat.MixinEmbeddiumSnowFaceCulling"
   ],
   "injectors": {
     "defaultRequire": 1

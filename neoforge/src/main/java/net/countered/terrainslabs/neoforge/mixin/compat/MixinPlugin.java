@@ -22,7 +22,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (mixinClassName.contains("MixinEmbeddiumBlockRenderer")) {
+        if (mixinClassName.contains(".compat.MixinEmbeddium")) {
             return LoadingModList.get()
                     .getModFileById("embeddium") != null;
         }
