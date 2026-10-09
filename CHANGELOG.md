@@ -1,10 +1,5 @@
 # Changelog
 
-## [3.1.8]
-
-### Changed
-- Revert all floating ice slab fix attempts and restore the pre-fix terrain generation behavior.
-
 ## [3.1.2]
 
 ### Fixed
