@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.1.5]
+
+### Fixed
+- Restore the original iceberg placement and carving rules. Keep targeted cleanup for generated packed ice, blue ice and snow slabs whose supporting block is removed, preserving supported slabs, full terrain blocks and water.
+
 ## [3.1.3]
 
 ### Fixed

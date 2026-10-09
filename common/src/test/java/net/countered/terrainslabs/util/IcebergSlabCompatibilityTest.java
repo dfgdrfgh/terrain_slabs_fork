@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -73,12 +72,9 @@ class IcebergSlabCompatibilityTest {
 
     @ParameterizedTest
     @MethodSource("icebergSlabs")
-    void generatedSlabsParticipateInCarvingAndOverlappingPlacement(Block block, SlabType type, boolean wet) {
+    void recognizesGeneratedRimsForSupportCleanup(Block block, SlabType type, boolean wet) {
         BlockState state = slab(block, type, wet, true);
-        assertTrue(isIcebergSlab(state), "Carving must recognize generated iceberg slabs");
-        BlockState placement = placement(state);
-        Block expected = wet ? Blocks.WATER : block == snow ? Blocks.SNOW_BLOCK : Blocks.ICE;
-        assertTrue(placement.is(expected), "An overlapping iceberg must be allowed to fill the slab cell");
+        assertTrue(isIcebergSlab(state), "Support cleanup must recognize generated ice rims");
         assertTrue(state.is(block), "The compatibility query must not change the actual slab state");
         assertEquals(type, state.getValue(SlabBlock.TYPE));
         assertEquals(wet, state.getValue(SlabBlock.WATERLOGGED));
@@ -86,10 +82,9 @@ class IcebergSlabCompatibilityTest {
 
     @ParameterizedTest
     @MethodSource("icebergSlabs")
-    void playerPlacedSlabsRemainOutsideIcebergGeneration(Block block, SlabType type, boolean wet) {
+    void playerPlacedSlabsRemainOutsideSupportCleanup(Block block, SlabType type, boolean wet) {
         BlockState state = slab(block, type, wet, false);
         assertFalse(isIcebergSlab(state));
-        assertSame(state, placement(state));
     }
 
     @Test
@@ -99,19 +94,7 @@ class IcebergSlabCompatibilityTest {
                 Blocks.SNOW_BLOCK.defaultBlockState(), Blocks.SNOW.defaultBlockState(),
                 Blocks.WATER.defaultBlockState(), Blocks.AIR.defaultBlockState()}) {
             assertFalse(isIcebergSlab(state));
-            assertSame(state, placement(state));
-        }
-    }
-
-    @Test
-    void topRimIsSupportedByFullIceAboveEvenWithAirBelow() {
-        BlockPos pos = new BlockPos(15, 70, 15);
-        BlockGetter level = levelWithSupport(pos, Blocks.PACKED_ICE.defaultBlockState());
-        assertTrue(level.getBlockState(pos.below()).isAir());
-        assertTrue(IcebergSlabCompatibility.topSlabHasSupport(level, pos));
-        assertTrue(IcebergSlabCompatibility.isTopSlab(slab(packedIce, SlabType.TOP, false, true)));
-        assertFalse(IcebergSlabCompatibility.topSlabHasSupport(levelWithSupport(pos, Blocks.AIR.defaultBlockState()), pos));
-        assertFalse(IcebergSlabCompatibility.topSlabHasSupport(levelWithSupport(pos, Blocks.WATER.defaultBlockState()), pos));
+            }
     }
 
     static Stream<Arguments> attachedSlabs() {
@@ -190,6 +173,22 @@ class IcebergSlabCompatibilityTest {
         }
     }
 
+    @Test
+    void clearingAnOrphanDoesNotRemoveFullTerrainAboveIt() {
+        BlockPos support = new BlockPos(15, 70, 15);
+        for (Block terrain : new Block[]{Blocks.STONE, Blocks.DIRT, Blocks.GRAVEL,
+                Blocks.MOSSY_COBBLESTONE, Blocks.COAL_ORE, Blocks.PACKED_ICE}) {
+            Map<BlockPos, BlockState> states = new HashMap<>();
+            states.put(support, Blocks.PACKED_ICE.defaultBlockState());
+            states.put(support.above(), slab(packedIce, SlabType.BOTTOM, false, true));
+            BlockState fullTerrain = terrain.defaultBlockState();
+            states.put(support.above(2), fullTerrain);
+            carveSupport(mutableLevel(states, support), states, support, Blocks.AIR.defaultBlockState());
+            assertTrue(states.get(support.above()).isAir());
+            assertSame(fullTerrain, states.get(support.above(2)), "Cleanup must leave full terrain intact");
+        }
+    }
+
     private static void carveSupport(LevelAccessor level, Map<BlockPos, BlockState> states, BlockPos support, BlockState carved) {
         BlockState previous = states.put(support, carved);
         if (IcebergSlabCompatibility.removesIcebergSupport(previous, carved)) {
@@ -206,6 +205,12 @@ class IcebergSlabCompatibilityTest {
                         assertEquals(support.getX(), pos.getX(), "Cleanup must not load adjacent chunks");
                         assertEquals(support.getZ(), pos.getZ(), "Cleanup must stay in the changed block's column");
                         if (method.getName().equals("getBlockState")) return states.getOrDefault(pos, Blocks.AIR.defaultBlockState());
+                        BlockState previous = states.getOrDefault(pos, Blocks.AIR.defaultBlockState());
+                        assertTrue(isIcebergSlab(previous) || previous.is(Blocks.SNOW),
+                                "Cleanup must never write over a full terrain block or another slab material");
+                        BlockState replacement = (BlockState) args[1];
+                        assertTrue(replacement.isAir() || replacement.is(Blocks.WATER),
+                                "Cleanup must not place full ice or change surrounding terrain materials");
                         states.put(pos.immutable(), (BlockState) args[1]);
                         return true;
                     }
@@ -213,22 +218,8 @@ class IcebergSlabCompatibilityTest {
                 });
     }
 
-    private static BlockGetter levelWithSupport(BlockPos pos, BlockState support) {
-        return (BlockGetter) Proxy.newProxyInstance(BlockGetter.class.getClassLoader(),
-                new Class<?>[]{BlockGetter.class}, (proxy, method, args) -> {
-                    if (method.getName().equals("getBlockState")) {
-                        return args[0].equals(pos.above()) ? support : Blocks.AIR.defaultBlockState();
-                    }
-                    throw new AssertionError("Unexpected world operation: " + method.getName());
-                });
-    }
-
     private static boolean isIcebergSlab(BlockState state) {
         return IcebergSlabCompatibility.isGeneratedIcebergSlab(state, packedIce, blueIce, snow);
-    }
-
-    private static BlockState placement(BlockState state) {
-        return IcebergSlabCompatibility.placementState(state, packedIce, blueIce, snow);
     }
 
     private static BlockState slab(Block block, SlabType type, boolean wet, boolean generated) {

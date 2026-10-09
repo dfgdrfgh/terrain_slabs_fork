@@ -8,7 +8,6 @@
   ],
   "mixins": [
     "feature.MixinDiskFeature",
-    "feature.MixinIcebergFeature",
     "feature.MixinOreFeature",
     "feature.WorldGenRegionMixin",
     "ontop.place.MixinBushBlock",

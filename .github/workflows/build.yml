@@ -24,6 +24,21 @@ jobs:
           cache-read-only: false
       - name: Test iceberg slab compatibility and build Fabric and NeoForge
         run: bash ./gradlew :common:test :fabric:build :neoforge:build --no-daemon
+      - name: Verify original iceberg generator is not modified
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, zipfile
+          jars = [p for platform in ('fabric', 'neoforge')
+                  for p in pathlib.Path(platform, 'build', 'libs').glob('*.jar')
+                  if not p.name.endswith('-sources.jar') and '-dev' not in p.name]
+          assert len(jars) == 2, f'Expected two playable jars, got {jars}'
+          for path in jars:
+              with zipfile.ZipFile(path) as jar:
+                  config = json.loads(jar.read('terrain_slabs.mixins.json'))
+                  assert 'feature.MixinIcebergFeature' not in config['mixins'], 'Iceberg carving/placement hook must not ship'
+                  assert not any(name.endswith('/MixinIcebergFeature.class') for name in jar.namelist()), 'Obsolete iceberg hook class must not ship'
+                  print(f'{path.name}: original iceberg placement and carving rules retained')
+          PY
       - name: Verify Fabric and NeoForge mixins load
         run: |
           python - <<'PY'
