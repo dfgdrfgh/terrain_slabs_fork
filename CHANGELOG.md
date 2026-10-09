@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.1.6]
+
+### Fixed
+- Replace ice slab cleanup with guarded generation. Packed ice, blue ice and iceberg snow slabs are placed only after features finish and only while attached to iceberg material. Preserve carved air/water, valid hanging and side-attached rims, and full terrain blocks.
+
 ## [3.1.5]
 
 ### Fixed

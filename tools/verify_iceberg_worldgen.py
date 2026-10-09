@@ -78,43 +78,79 @@ def section_states(section):
 
 def verify_world(directory, loader):
     counts = {'packed_ice_slab': 0, 'blue_ice_slab': 0, 'snow_slab': 0}
-    unsupported = []
-    chunks = 0
-    deferred = 0
-    empty = {'minecraft:air', 'minecraft:cave_air', 'minecraft:void_air', 'minecraft:water',
-             'minecraft:bubble_column', 'minecraft:snow'}
-    for chunk in read_chunks(directory / 'region'):
-        # Border chunks can be saved at FULL before prepareTickingChunk runs native
-        # postprocessing. They are not ready to send to a player yet; check completed chunks.
-        if any(packed & 0x8000 for section in chunk.get('PostProcessing', []) for packed in section):
-            deferred += 1
-            continue
-        chunks += 1
-        sections = {s['Y']: section_states(s) for s in chunk.get('sections', [])}
-        for section_y, states in sections.items():
+    ice_blocks = {'minecraft:packed_ice', 'minecraft:blue_ice', 'minecraft:snow_block'}
+    chunks = list(read_chunks(directory / 'region'))
+    sections = {(c['xPos'], c['zPos']): {s['Y']: section_states(s) for s in c.get('sections', [])}
+                for c in chunks}
+    pending = {(c['xPos'], c['zPos']) for c in chunks
+               if any(packed & 0x8000 for section in c.get('PostProcessing', []) for packed in section)}
+    completed = set(sections) - pending
+    air = {'Name': 'minecraft:air'}
+
+    def state_at(pos):
+        x, y, z = pos
+        column = sections.get((x // 16, z // 16))
+        assert column is not None, f'{loader}: missing neighboring support chunk at {pos}'
+        values = column.get(y // 16)
+        return air if values is None else values[(y % 16) * 256 + (z % 16) * 16 + x % 16]
+
+    rims = {}
+    for chunk_pos, column in sections.items():
+        for section_y, states in column.items():
             for index, state in enumerate(states):
                 name = state['Name'].removeprefix('terrain_slabs:')
                 properties = state.get('Properties', {})
                 if name not in counts or properties.get('generated') != 'true':
                     continue
                 slab_type = properties.get('type')
-                if slab_type not in ('top', 'bottom'):
+                if slab_type not in ('top', 'bottom', 'double'):
                     continue
-                counts[name] += 1
-                y = section_y * 16 + index // 256
-                support_y = y + (1 if slab_type == 'top' else -1)
-                support_section = sections.get(support_y // 16)
-                assert support_section is not None, 'Slab support section must be saved'
-                support = support_section[(support_y % 16) * 256 + index % 256]
-                if support['Name'] in empty:
-                    unsupported.append((chunk['xPos'] * 16 + index % 16, y,
-                                        chunk['zPos'] * 16 + index // 16 % 16, state, support))
-    assert chunks >= 25, f'{loader}: insufficient generated chunks: {chunks}'
+                pos = (chunk_pos[0] * 16 + index % 16, section_y * 16 + index // 256,
+                       chunk_pos[1] * 16 + index // 16 % 16)
+                rims[pos] = slab_type
+                if chunk_pos in completed and slab_type != 'double':
+                    counts[name] += 1
+
+    # Check complete attachment paths, so a group of slabs floating together cannot
+    # pass merely because its members touch. Side contact requires matching half faces.
+    edges = {pos: [] for pos in rims}
+    anchored = set()
+    for pos, slab_type in rims.items():
+        x, y, z = pos
+        neighbors = [(x + 1, y, z), (x - 1, y, z), (x, y, z + 1), (x, y, z - 1)]
+        if slab_type in ('top', 'double'):
+            neighbors.append((x, y + 1, z))
+        if slab_type in ('bottom', 'double'):
+            neighbors.append((x, y - 1, z))
+        for neighbor in neighbors:
+            state = state_at(neighbor)
+            if state['Name'] in ice_blocks:
+                anchored.add(pos)
+                continue
+            other = rims.get(neighbor)
+            if other is None:
+                continue
+            touching = (other == 'double' or
+                        (neighbor[1] == y and (other == slab_type or slab_type == 'double')) or
+                        (neighbor[1] > y and other == 'bottom') or
+                        (neighbor[1] < y and other == 'top'))
+            if touching:
+                edges[pos].append(neighbor)
+
+    reached = set(anchored)
+    todo = list(anchored)
+    while todo:
+        for neighbor in edges[todo.pop()]:
+            if neighbor not in reached:
+                reached.add(neighbor)
+                todo.append(neighbor)
+    unsupported = [pos for pos in rims if (pos[0] // 16, pos[2] // 16) in completed and pos not in reached]
+    assert len(completed) >= 25, f'{loader}: insufficient completed chunks: {len(completed)}'
     assert counts['packed_ice_slab'] > 0, f'{loader}: fixture generated no packed ice slabs'
     assert counts['blue_ice_slab'] > 0, f'{loader}: fixture generated no blue ice slabs'
-    assert not unsupported, f'{loader}: {len(unsupported)} unsupported iceberg rims, examples: {unsupported[:10]}'
-    print(f'{loader}: {chunks} completed frozen-ocean chunks ({deferred} border chunks pending), '
-          f'{counts}, zero unsupported iceberg slabs', flush=True)
+    assert not unsupported, f'{loader}: {len(unsupported)} disconnected iceberg rims, examples: {unsupported[:10]}'
+    print(f'{loader}: {len(completed)} completed frozen-ocean chunks ({len(pending)} border chunks pending), '
+          f'{counts}, zero disconnected iceberg slabs', flush=True)
 
 
 def prepare_world(run):

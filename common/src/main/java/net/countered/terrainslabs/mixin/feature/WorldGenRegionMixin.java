@@ -3,14 +3,11 @@ package net.countered.terrainslabs.mixin.feature;
 import net.countered.terrainslabs.block.ModSlabsMap;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
-import net.countered.terrainslabs.util.IcebergSlabCompatibility;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.ProtoChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,17 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(WorldGenRegion.class)
 public class WorldGenRegionMixin {
-
-    @Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At("RETURN"))
-    private void terrain_slabs$queueIceRimCheck(BlockPos pos, BlockState state, int flags,
-                                              int recursionLeft, CallbackInfoReturnable<Boolean> cir) {
-        if (!cir.getReturnValueZ() || !IcebergSlabCompatibility.isGeneratedIcebergSlab(state)) return;
-        WorldGenRegion level = (WorldGenRegion) (Object) this;
-        ChunkAccess chunk = level.getChunk(pos);
-        // Keep the slab visible to every feature until the chunk reaches final postprocessing.
-        chunk.addPackedPostProcess((short) (ProtoChunk.packOffsetCoordinates(pos)
-                | IcebergSlabCompatibility.POSTPROCESS_MARKER), chunk.getSectionIndex(pos.getY()));
-    }
 
     /**
      * fix for grass slabs on village paths
