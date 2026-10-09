@@ -44,7 +44,9 @@ public final class IcebergSlabPlacement {
         else if (state.is(ModBlocksRegistry.SNOW_SLAB.get())) material = SNOW;
         else return false;
         SlabType type = state.getValue(SlabBlock.TYPE);
-        if (type == SlabType.DOUBLE) return false;
+        // Retinting a complete terrain block is not an exposed iceberg rim.
+        // Keep its original material instead of introducing ice before later carving.
+        if (type == SlabType.DOUBLE) return true;
         ChunkAccess chunk = region.getChunk(pos);
         chunk.addPackedPostProcess(packPlacement(pos, type, material), chunk.getSectionIndex(pos.getY()));
         return true;
@@ -114,13 +116,17 @@ public final class IcebergSlabPlacement {
         BlockState current = level.getBlockState(pos);
         BlockState above = level.getBlockState(pos.above());
         BlockState below = level.getBlockState(pos.below());
+        boolean conversion = current.getBlock() instanceof SlabBlock
+                && current.hasProperty(CustomSlab.GENERATED) && current.getValue(CustomSlab.GENERATED)
+                && current.getValue(SlabBlock.TYPE) == type;
         if (type == SlabType.TOP) {
             // A carve may have removed this proposed rim. Never refill that carve or
             // turn a later feature's different material into an ice slab.
             Block full = slab == packedIce ? Blocks.PACKED_ICE : slab == blueIce ? Blocks.BLUE_ICE : Blocks.SNOW_BLOCK;
-            if (!current.is(full) || below.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) return false;
+            if ((!current.is(full) && !conversion)
+                    || below.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) return false;
         } else {
-            if ((!current.isAir() && !current.is(Blocks.WATER) && !current.is(Blocks.SNOW))
+            if ((!current.isAir() && !current.is(Blocks.WATER) && !current.is(Blocks.SNOW) && !conversion)
                     || !above.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty()) return false;
         }
 
@@ -147,6 +153,7 @@ public final class IcebergSlabPlacement {
         }
         if (!connected) return false;
         if (type == SlabType.TOP) wet = below.is(Blocks.WATER) && waterBeside;
+        if (conversion) wet = current.getValue(SlabBlock.WATERLOGGED);
         BlockState state = slab.defaultBlockState().setValue(CustomSlab.GENERATED, true)
                 .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, wet);
         return level.setBlock(pos, state, 2);

@@ -11,6 +11,7 @@ import struct
 import subprocess
 import time
 import zlib
+import argparse
 
 
 def read_nbt(data):
@@ -94,6 +95,19 @@ def verify_world(directory, loader):
         values = column.get(y // 16)
         return air if values is None else values[(y % 16) * 256 + (z % 16) * 16 + x % 16]
 
+    # A native late disk temporarily changes the block below a supported stone
+    # ceiling rim to blue ice, then carves that ice away. Disk's material hook
+    # used to recolor the rim immediately, leaving a phantom blue-ice slab.
+    # The original stone rim and its stone ceiling must survive unchanged.
+    for cx, cz in completed:
+        pos = (cx * 16 + 8, 181, cz * 16 + 8)
+        state = state_at(pos)
+        assert state['Name'] == 'terrain_slabs:terrain_stone_slab' and state.get('Properties', {}).get('type') == 'top', (
+            f'{loader}: disk retint changed original terrain at {pos}: {state}')
+        assert state_at((pos[0], 182, pos[2]))['Name'] == 'minecraft:stone', f'{loader}: stone ceiling was changed'
+        assert state_at((pos[0], 180, pos[2]))['Name'] == 'minecraft:air', f'{loader}: late ice carve did not run'
+    print(f'{loader}: {len(completed)} late disk/carve fixtures preserved their original stone rims', flush=True)
+
     rims = {}
     for chunk_pos, column in sections.items():
         for section_y, states in column.items():
@@ -169,6 +183,43 @@ def prepare_world(run):
         'placement': [{'type': 'minecraft:rarity_filter', 'chance': 1},
                       {'type': 'minecraft:in_square'}, {'type': 'minecraft:biome'}],
     }))
+    # Reproduce disk retinting followed by a later ice-only carve, without
+    # depending on third-party mods or redistributing their datapacks.
+    fixture_features = pack / 'data' / 'iceberg_regression' / 'worldgen' / 'placed_feature'
+    fixture_features.mkdir(parents=True)
+    def put_feature(name, feature, y):
+        (fixture_features / (name + '.json')).write_text(json.dumps({
+            'feature': feature,
+            'placement': [{'type': 'minecraft:random_offset', 'xz_spread': 8, 'y_spread': 0},
+                          {'type': 'minecraft:height_range', 'height': {'type': 'minecraft:constant', 'value': {'absolute': y}}}],
+        }))
+    def disk(block, target):
+        return {'type': 'minecraft:disk', 'config': {
+            'state_provider': {'fallback': {'type': 'minecraft:simple_state_provider', 'state': {'Name': block}}, 'rules': []},
+            'radius': 0, 'half_height': 0,
+            'target': {'type': 'minecraft:matching_blocks', 'blocks': target},
+        }}
+    put_feature('stone_ceiling', disk('minecraft:stone', ['minecraft:air']), 182)
+    put_feature('stone_floor', disk('minecraft:stone', ['minecraft:air']), 180)
+    put_feature('stone_rim', {'type': 'minecraft:simple_block', 'config': {
+        'to_place': {'type': 'minecraft:simple_state_provider', 'state': {
+            'Name': 'terrain_slabs:terrain_stone_slab',
+            'Properties': {'type': 'top', 'waterlogged': 'false', 'generated': 'true'},
+        }}}}, 181)
+    put_feature('late_ice', disk('minecraft:blue_ice', ['minecraft:stone']), 180)
+    put_feature('late_carve', disk('minecraft:air', ['minecraft:blue_ice']), 180)
+    biome = pack / 'data' / 'minecraft' / 'worldgen' / 'biome'
+    biome.mkdir(parents=True)
+    features = [[] for _ in range(11)]
+    features[0] = ['iceberg_regression:stone_ceiling', 'iceberg_regression:stone_floor', 'iceberg_regression:stone_rim']
+    features[2] = ['minecraft:iceberg_packed', 'minecraft:iceberg_blue']
+    features[9] = ['iceberg_regression:late_ice']
+    features[10] = ['iceberg_regression:late_carve']
+    (biome / 'deep_frozen_ocean.json').write_text(json.dumps({
+        'has_precipitation': True, 'temperature': 0.0, 'downfall': 0.5,
+        'effects': {'sky_color': 8103167, 'fog_color': 12638463, 'water_color': 3750089, 'water_fog_color': 329011},
+        'spawners': {}, 'spawn_costs': {}, 'carvers': {'air': []}, 'features': features,
+    }))
     dimensions = {
         'minecraft:overworld': {'type': 'minecraft:overworld', 'generator': {'type': 'minecraft:noise',
             'settings': 'minecraft:overworld', 'biome_source': {'type': 'minecraft:fixed', 'biome': 'minecraft:deep_frozen_ocean'}}},
@@ -232,7 +283,10 @@ def complete_fixture_chunks(log):
 
 
 def main():
-    for loader in ('fabric', 'neoforge'):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--loader', choices=('fabric', 'neoforge'))
+    args = parser.parse_args()
+    for loader in ((args.loader,) if args.loader else ('fabric', 'neoforge')):
         run = Path(loader) / 'run'
         run.mkdir(parents=True, exist_ok=True)
         worlds = [prepare_world(run), prepare_world(Path('run'))]

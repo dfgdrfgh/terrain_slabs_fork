@@ -3,6 +3,7 @@ package net.countered.terrainslabs.mixin.feature;
 import com.llamalad7.mixinextras.sugar.Local;
 import net.countered.terrainslabs.block.ModSlabsMap;
 import net.countered.terrainslabs.util.MixinHelper;
+import net.countered.terrainslabs.util.IcebergSlabPlacement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.WorldGenLevel;
@@ -53,7 +54,9 @@ public class MixinDiskFeature {
         BlockState currentState = level.getBlockState(targetPos);
 
         if (currentState.getBlock() instanceof SlabBlock && !currentState.is(newSlabBlock)) {
-            level.setBlock(targetPos, MixinHelper.withCopiedSlabProperties(currentState, newSlabBlock), 2);
+            BlockState replacement = MixinHelper.withCopiedSlabProperties(currentState, newSlabBlock);
+            if (IcebergSlabPlacement.deferPlacement(level, targetPos, replacement)) return;
+            level.setBlock(targetPos, replacement, 2);
         }
     }
 }

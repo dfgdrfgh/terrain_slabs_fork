@@ -11,7 +11,41 @@ permissions:
   contents: read
 
 jobs:
+  reproduce_previous_failure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 085d9896477f8636b2144fd6f3766445f5c94931
+          path: before-fix
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prove the late disk/carve regression catches the previous build
+        run: |
+          cp tools/verify_iceberg_worldgen.py before-fix/tools/verify_iceberg_worldgen.py
+          python3 - <<'PY'
+          import pathlib, subprocess
+          result = subprocess.run(['python3', 'tools/verify_iceberg_worldgen.py', '--loader', 'fabric'],
+                                  cwd='before-fix', stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+          pathlib.Path('before-fix-regression.log').write_text(result.stdout)
+          print(result.stdout)
+          assert result.returncode != 0, 'The previous build unexpectedly passed the regression'
+          assert 'disk retint changed original terrain' in result.stdout, 'Baseline failed for a reason other than the reproduced terrain bug'
+          print('Previous build reproduced phantom ice retinting; negative control passed')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: previous-build-regression-logs
+          path: |
+            before-fix-regression.log
+            before-fix/*-iceberg-worldgen.log
   build:
+    needs: reproduce_previous_failure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +73,9 @@ jobs:
                   assert 'feature.MixinIceSlabPlacement' in config['mixins'], 'Guarded ice generation must ship'
                   assert not any(name.endswith(('/MixinIceSlabPostprocessing.class', '/IcebergSlabCompatibility.class')) for name in jar.namelist()), 'Obsolete removal pass must not ship'
                   assert not any(name.endswith('/MixinIcebergFeature.class') for name in jar.namelist()), 'Obsolete iceberg hook class must not ship'
+                  for hook in ('MixinDiskFeature', 'MixinOreFeature'):
+                      code = jar.read(f'net/countered/terrainslabs/mixin/feature/{hook}.class')
+                      assert b'IcebergSlabPlacement' in code and b'deferPlacement' in code, f'{hook} bypasses the generation guard'
                   print(f'{path.name}: original iceberg placement and carving rules retained')
           PY
       - name: Verify Fabric and NeoForge mixins load

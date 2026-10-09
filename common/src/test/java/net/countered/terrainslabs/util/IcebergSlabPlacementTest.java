@@ -229,6 +229,47 @@ class IcebergSlabPlacementTest {
         }
     }
 
+    @ParameterizedTest
+    @MethodSource("materialsAndTypes")
+    void diskOrOreRetintPreservesOrdinaryTerrainAfterItsIceAnchorIsCarved(Block block, SlabType type) {
+        for (Block carved : new Block[]{Blocks.AIR, Blocks.WATER, Blocks.LIGHT, Blocks.STONE}) {
+            Map<BlockPos, BlockState> states = new HashMap<>();
+            states.put(POS, slab(stone, type, false, true));
+            states.put(type == SlabType.TOP ? POS.above() : POS.below(), carved.defaultBlockState());
+            Map<BlockPos, BlockState> before = Map.copyOf(states);
+            assertFalse(place(states, block, type));
+            assertEquals(before, states, "An ice retint must not erase or recolor the original terrain");
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("materialsAndTypes")
+    void connectedDiskOrOreRetintKeepsExistingHalfAndWaterlogging(Block block, SlabType type) {
+        for (boolean wet : new boolean[]{false, true}) {
+            Map<BlockPos, BlockState> states = new HashMap<>();
+            states.put(POS, slab(stone, type, wet, true));
+            states.put(type == SlabType.TOP ? POS.above() : POS.below(), Blocks.BLUE_ICE.defaultBlockState());
+            assertTrue(place(states, block, type));
+            assertTrue(states.get(POS).is(block));
+            assertEquals(type, states.get(POS).getValue(SlabBlock.TYPE));
+            assertEquals(wet, states.get(POS).getValue(SlabBlock.WATERLOGGED));
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("materialsAndTypes")
+    void retintCannotOverwritePlayerSlabsOrAnotherHalf(Block block, SlabType type) {
+        Map<BlockPos, BlockState> states = new HashMap<>();
+        states.put(type == SlabType.TOP ? POS.above() : POS.below(), Blocks.BLUE_ICE.defaultBlockState());
+        for (BlockState original : new BlockState[]{slab(stone, type, false, false),
+                slab(stone, type == SlabType.TOP ? SlabType.BOTTOM : SlabType.TOP, false, true),
+                slab(stone, SlabType.DOUBLE, false, true)}) {
+            states.put(POS, original);
+            assertFalse(place(states, block, type));
+            assertSame(original, states.get(POS));
+        }
+    }
+
     private static Map<BlockPos, BlockState> initial(Block block, SlabType type, Block vacant) {
         Map<BlockPos, BlockState> states = new HashMap<>();
         Block full = block == packedIce ? Blocks.PACKED_ICE : block == blueIce ? Blocks.BLUE_ICE : Blocks.SNOW_BLOCK;
