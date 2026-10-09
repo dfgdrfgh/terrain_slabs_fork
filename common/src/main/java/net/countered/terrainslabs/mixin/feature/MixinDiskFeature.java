@@ -1,22 +1,19 @@
 package net.countered.terrainslabs.mixin.feature;
 
-import com.llamalad7.mixinextras.sugar.Local;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.countered.terrainslabs.block.ModSlabsMap;
 import net.countered.terrainslabs.util.MixinHelper;
 import net.countered.terrainslabs.util.IcebergSlabPlacement;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.feature.DiskFeature;
-import net.minecraft.world.level.levelgen.feature.configurations.DiskConfiguration;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(DiskFeature.class)
 public class MixinDiskFeature {
@@ -24,27 +21,28 @@ public class MixinDiskFeature {
     /**
      * After placing a disk feature, check the blocks above and below it. If they are slabs that don't match the disk's material, replace them with the correct slab type.
      */
-    @Inject(
+    @WrapOperation(
             method = "placeColumn",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/world/level/WorldGenLevel;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"
             )
     )
-    private void countered$updateSlabsAroundDisk(
-            DiskConfiguration config, WorldGenLevel level, RandomSource random, int maxY, int minY, BlockPos.MutableBlockPos pos,
-            CallbackInfoReturnable<Boolean> cir,
-            @Local(ordinal = 0) BlockState blockState
-    ) {
-        Block diskBlock = blockState.getBlock();
-        Block newSlab = ModSlabsMap.getSlabForBlock(diskBlock);
-
+    private boolean countered$updateSlabsAroundDisk(WorldGenLevel level, BlockPos pos,
+                                                   BlockState placedState, int flags,
+                                                   Operation<Boolean> original) {
+        boolean placed = original.call(level, pos, placedState, flags);
+        if (!placed) return false;
+        // Use the state actually written, not placeColumn's first BlockState
+        // local (the material being removed). An air carve has no slab material.
+        Block newSlab = ModSlabsMap.getSlabForBlock(placedState.getBlock());
         if (newSlab != null) {
             // Check ABOVE (y + 1)
             countered$checkAndReplaceDiskSlab(level, pos.above(), newSlab);
             // Check BELOW (y - 1)
             countered$checkAndReplaceDiskSlab(level, pos.below(), newSlab);
         }
+        return true;
     }
 
     @Unique

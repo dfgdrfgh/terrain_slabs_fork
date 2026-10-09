@@ -106,6 +106,9 @@ def verify_world(directory, loader):
             f'{loader}: disk retint changed original terrain at {pos}: {state}')
         assert state_at((pos[0], 182, pos[2]))['Name'] == 'minecraft:stone', f'{loader}: stone ceiling was changed'
         assert state_at((pos[0], 180, pos[2]))['Name'] == 'minecraft:air', f'{loader}: late ice carve did not run'
+        clay = state_at((pos[0], 191, pos[2]))
+        assert clay['Name'] == 'terrain_slabs:clay_slab' and clay.get('Properties', {}).get('type') == 'top', (
+            f'{loader}: disk hook used removed material instead of placed clay: {clay}')
     print(f'{loader}: {len(completed)} late disk/carve fixtures preserved their original stone rims', flush=True)
 
     rims = {}
@@ -208,12 +211,21 @@ def prepare_world(run):
         }}}}, 181)
     put_feature('late_ice', disk('minecraft:blue_ice', ['minecraft:stone']), 180)
     put_feature('late_carve', disk('minecraft:air', ['minecraft:blue_ice']), 180)
+    put_feature('clay_ceiling', disk('minecraft:stone', ['minecraft:air']), 192)
+    put_feature('clay_floor', disk('minecraft:stone', ['minecraft:air']), 190)
+    put_feature('clay_rim', {'type': 'minecraft:simple_block', 'config': {
+        'to_place': {'type': 'minecraft:simple_state_provider', 'state': {
+            'Name': 'terrain_slabs:terrain_stone_slab',
+            'Properties': {'type': 'top', 'waterlogged': 'false', 'generated': 'true'},
+        }}}}, 191)
+    put_feature('late_clay', disk('minecraft:clay', ['minecraft:stone']), 190)
     biome = pack / 'data' / 'minecraft' / 'worldgen' / 'biome'
     biome.mkdir(parents=True)
     features = [[] for _ in range(11)]
-    features[0] = ['iceberg_regression:stone_ceiling', 'iceberg_regression:stone_floor', 'iceberg_regression:stone_rim']
+    features[0] = ['iceberg_regression:' + name for name in
+                   ('stone_ceiling', 'stone_floor', 'stone_rim', 'clay_ceiling', 'clay_floor', 'clay_rim')]
     features[2] = ['minecraft:iceberg_packed', 'minecraft:iceberg_blue']
-    features[9] = ['iceberg_regression:late_ice']
+    features[9] = ['iceberg_regression:late_ice', 'iceberg_regression:late_clay']
     features[10] = ['iceberg_regression:late_carve']
     (biome / 'deep_frozen_ocean.json').write_text(json.dumps({
         'has_precipitation': True, 'temperature': 0.0, 'downfall': 0.5,
