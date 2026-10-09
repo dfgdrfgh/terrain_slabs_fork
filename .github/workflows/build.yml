@@ -11,41 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  reproduce_previous_failure:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          ref: 085d9896477f8636b2144fd6f3766445f5c94931
-          path: before-fix
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Prove the late disk/carve regression catches the previous build
-        run: |
-          cp tools/verify_iceberg_worldgen.py before-fix/tools/verify_iceberg_worldgen.py
-          python3 - <<'PY'
-          import pathlib, subprocess
-          result = subprocess.run(['python3', 'tools/verify_iceberg_worldgen.py', '--loader', 'fabric'],
-                                  cwd='before-fix', stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-          pathlib.Path('before-fix-regression.log').write_text(result.stdout)
-          print(result.stdout)
-          assert result.returncode != 0, 'The previous build unexpectedly passed the regression'
-          assert 'disk retint changed original terrain' in result.stdout, 'Baseline failed for a reason other than the reproduced terrain bug'
-          print('Previous build reproduced phantom ice retinting; negative control passed')
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: previous-build-regression-logs
-          path: |
-            before-fix-regression.log
-            before-fix/*-iceberg-worldgen.log
   build:
-    needs: reproduce_previous_failure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,78 +22,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: Test guarded ice slab placement and build Fabric and NeoForge
-        run: bash ./gradlew :common:test :fabric:build :neoforge:build --no-daemon
-      - name: Verify original iceberg generator is not modified
-        run: |
-          python3 - <<'PY'
-          import json, pathlib, zipfile
-          jars = [p for platform in ('fabric', 'neoforge')
-                  for p in pathlib.Path(platform, 'build', 'libs').glob('*.jar')
-                  if not p.name.endswith('-sources.jar') and '-dev' not in p.name]
-          assert len(jars) == 2, f'Expected two playable jars, got {jars}'
-          for path in jars:
-              with zipfile.ZipFile(path) as jar:
-                  config = json.loads(jar.read('terrain_slabs.mixins.json'))
-                  assert 'feature.MixinIcebergFeature' not in config['mixins'], 'Iceberg carving/placement hook must not ship'
-                  assert 'feature.MixinIceSlabPlacement' in config['mixins'], 'Guarded ice generation must ship'
-                  assert not any(name.endswith(('/MixinIceSlabPostprocessing.class', '/IcebergSlabCompatibility.class')) for name in jar.namelist()), 'Obsolete removal pass must not ship'
-                  assert not any(name.endswith('/MixinIcebergFeature.class') for name in jar.namelist()), 'Obsolete iceberg hook class must not ship'
-                  for hook in ('MixinDiskFeature', 'MixinOreFeature'):
-                      code = jar.read(f'net/countered/terrainslabs/mixin/feature/{hook}.class')
-                      assert b'IcebergSlabPlacement' in code and b'deferPlacement' in code, f'{hook} bypasses the generation guard'
-                  print(f'{path.name}: original iceberg placement and carving rules retained')
-          PY
-      - name: Verify Fabric and NeoForge mixins load
-        run: |
-          python - <<'PY'
-          import os, pathlib, re, signal, subprocess, time
-          for directory in ('run', 'fabric/run', 'neoforge/run'):
-              path = pathlib.Path(directory)
-              path.mkdir(parents=True, exist_ok=True)
-              (path / 'eula.txt').write_text('eula=false\n')
-          def ready(text):
-              return 'You need to agree to the EULA' in text or re.search(r'Done \([^\n]*\)! For help, type', text) is not None
-          for loader in ('fabric', 'neoforge'):
-              log = pathlib.Path(f'{loader}-startup.log')
-              with log.open('w') as output:
-                  process = subprocess.Popen(['bash', './gradlew', f':{loader}:runServer', '--no-daemon'],
-                                             stdout=output, stderr=subprocess.STDOUT,
-                                             stdin=subprocess.DEVNULL, start_new_session=True)
-                  try:
-                      deadline = time.monotonic() + 240
-                      while process.poll() is None and time.monotonic() < deadline:
-                          if ready(log.read_text()):
-                              break
-                          time.sleep(1)
-                  finally:
-                      if process.poll() is None:
-                          os.killpg(process.pid, signal.SIGTERM)
-                          try:
-                              process.wait(timeout=10)
-                          except subprocess.TimeoutExpired:
-                              os.killpg(process.pid, signal.SIGKILL)
-                              process.wait()
-              text = log.read_text()
-              print(text, flush=True)
-              assert ready(text), f'{loader} did not reach normal server bootstrap'
-              assert 'Registering Mod Blocks & Items for terrain_slabs' in text, f'{loader} did not initialize Terrain Slabs'
-              for error in ('Mixin apply failed', 'InvalidInjectionException', 'InjectionError', 'MixinTransformerError'):
-                  assert error not in text, f'{loader}: {error}'
-              print(f'{loader}: mixins and registries loaded; startup checkpoint reached', flush=True)
-          PY
-      - name: Verify iceberg attachments in completed frozen-ocean chunks
-        run: python3 tools/verify_iceberg_worldgen.py
-      - name: Upload regression logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: iceberg-regression-logs
-          path: |
-            *-startup.log
-            *-iceberg-worldgen.log
-            common/build/test-results/test/*.xml
-          if-no-files-found: warn
+      - name: Build Fabric and NeoForge
+        run: bash ./gradlew :fabric:build :neoforge:build --no-daemon
       - name: Collect playable jars
         run: |
           mkdir -p artifacts

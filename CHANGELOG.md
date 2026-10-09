@@ -1,19 +1,9 @@
 # Changelog
 
-## [3.1.6]
+## [3.1.8]
 
-### Fixed
-- Replace ice slab cleanup with guarded generation. Packed ice, blue ice and iceberg snow slabs are placed only after features finish and only while attached to iceberg material. Preserve carved air/water, valid hanging and side-attached rims, and full terrain blocks.
-
-## [3.1.5]
-
-### Fixed
-- Restore the original iceberg placement and carving rules. Check generated packed ice, blue ice and snow slabs during final chunk postprocessing instead of modifying blocks while features are still running. Preserve supported slabs, full terrain blocks and water.
-
-## [3.1.3]
-
-### Fixed
-- Teach iceberg carving, smoothing and overlapping placement about generated packed ice, blue ice and snow slabs so they remain part of the iceberg geometry instead of being skipped and stranded. Preserve player-placed slabs and account for top slabs hanging from support above.
+### Changed
+- Revert all floating ice slab fix attempts and restore the pre-fix terrain generation behavior.
 
 ## [3.1.2]
 

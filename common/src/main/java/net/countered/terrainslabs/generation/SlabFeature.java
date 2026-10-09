@@ -6,7 +6,6 @@ import net.countered.terrainslabs.block.customslabs.soilslabs.ISoilSlab;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.platform.PlatformConfigHooks;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
-import net.countered.terrainslabs.util.IcebergSlabPlacement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
@@ -319,7 +318,6 @@ public class SlabFeature extends Feature<NoneFeatureConfiguration> {
     }
 
     private void setBlockState(LevelAccessor world, BlockPos pos, BlockState state) {
-        if (IcebergSlabPlacement.deferPlacement(world, pos, state)) return;
         world.setBlock(pos, state, 3);
     }
 }
