@@ -22,8 +22,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: Build Fabric and NeoForge
-        run: bash ./gradlew :fabric:build :neoforge:build --no-daemon
+      - name: Test iceberg cleanup and build Fabric and NeoForge
+        run: bash ./gradlew :common:test :fabric:build :neoforge:build --no-daemon
       - name: Collect playable jars
         run: |
           mkdir -p artifacts

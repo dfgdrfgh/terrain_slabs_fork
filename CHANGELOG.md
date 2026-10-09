@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.1.3]
+
+### Fixed
+- Remove generated packed ice and blue ice slabs when later world-generation features clear their supporting blocks; preserve waterlogging and player-placed slabs.
+
 ## [3.1.2]
 
 ### Fixed
