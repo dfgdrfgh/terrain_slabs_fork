@@ -27,21 +27,37 @@ jobs:
       - name: Verify Fabric and NeoForge mixins load
         run: |
           python - <<'PY'
-          import pathlib, subprocess
+          import os, pathlib, signal, subprocess, time
           for directory in ('run', 'fabric/run', 'neoforge/run'):
               path = pathlib.Path(directory)
               path.mkdir(parents=True, exist_ok=True)
               (path / 'eula.txt').write_text('eula=false\n')
           for loader in ('fabric', 'neoforge'):
-              result = subprocess.run(['bash', './gradlew', f':{loader}:runServer', '--no-daemon'],
-                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                      text=True, timeout=180)
-              print(result.stdout)
-              pathlib.Path(f'{loader}-startup.log').write_text(result.stdout)
-              assert 'You need to agree to the EULA' in result.stdout, f'{loader} did not reach normal server bootstrap'
+              log = pathlib.Path(f'{loader}-startup.log')
+              with log.open('w') as output:
+                  process = subprocess.Popen(['bash', './gradlew', f':{loader}:runServer', '--no-daemon'],
+                                             stdout=output, stderr=subprocess.STDOUT,
+                                             stdin=subprocess.DEVNULL, start_new_session=True)
+                  try:
+                      deadline = time.monotonic() + 240
+                      while process.poll() is None and time.monotonic() < deadline:
+                          if 'You need to agree to the EULA' in log.read_text():
+                              break
+                          time.sleep(1)
+                  finally:
+                      if process.poll() is None:
+                          os.killpg(process.pid, signal.SIGTERM)
+                          try:
+                              process.wait(timeout=10)
+                          except subprocess.TimeoutExpired:
+                              os.killpg(process.pid, signal.SIGKILL)
+                              process.wait()
+              text = log.read_text()
+              print(text, flush=True)
+              assert 'You need to agree to the EULA' in text, f'{loader} did not reach normal server bootstrap'
               for error in ('Mixin apply failed', 'InvalidInjectionException', 'InjectionError', 'MixinTransformerError'):
-                  assert error not in result.stdout, f'{loader}: {error}'
-              print(f'{loader}: mixins and registries loaded; stopped before creating a world')
+                  assert error not in text, f'{loader}: {error}'
+              print(f'{loader}: mixins and registries loaded; stopped before creating a world', flush=True)
           PY
       - name: Collect playable jars
         run: |
