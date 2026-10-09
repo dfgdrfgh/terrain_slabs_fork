@@ -3,9 +3,12 @@ package net.countered.terrainslabs.util;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.nbt.ShortTag;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -13,6 +16,7 @@ import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.chunk.ProtoChunk;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -94,7 +98,7 @@ class IcebergSlabCompatibilityTest {
                 Blocks.SNOW_BLOCK.defaultBlockState(), Blocks.SNOW.defaultBlockState(),
                 Blocks.WATER.defaultBlockState(), Blocks.AIR.defaultBlockState()}) {
             assertFalse(isIcebergSlab(state));
-            }
+        }
     }
 
     static Stream<Arguments> attachedSlabs() {
@@ -161,15 +165,33 @@ class IcebergSlabCompatibilityTest {
     }
 
     @Test
-    void unrelatedWritesAndFullIceReplacementsNeedNoCleanup() {
-        for (Block block : new Block[]{Blocks.PACKED_ICE, Blocks.BLUE_ICE, Blocks.SNOW_BLOCK}) {
-            assertFalse(IcebergSlabCompatibility.removesIcebergSupport(block.defaultBlockState(), Blocks.PACKED_ICE.defaultBlockState()));
-            assertFalse(IcebergSlabCompatibility.removesIcebergSupport(block.defaultBlockState(), Blocks.BLUE_ICE.defaultBlockState()));
-            assertFalse(IcebergSlabCompatibility.removesIcebergSupport(block.defaultBlockState(), Blocks.SNOW_BLOCK.defaultBlockState()));
-        }
-        for (Block block : new Block[]{Blocks.AIR, Blocks.WATER, Blocks.STONE, Blocks.DIRT}) {
-            assertFalse(IcebergSlabCompatibility.removesIcebergSupport(block.defaultBlockState(), Blocks.AIR.defaultBlockState()));
-            assertFalse(IcebergSlabCompatibility.removesIcebergSupport(block.defaultBlockState(), Blocks.WATER.defaultBlockState()));
+    void laterFeaturesCanRestoreSupportBeforeTheFinalCheck() {
+        BlockPos support = new BlockPos(15, 70, 15);
+        BlockPos rim = support.above();
+        Map<BlockPos, BlockState> states = new HashMap<>();
+        BlockState original = slab(blueIce, SlabType.BOTTOM, true, true);
+        states.put(rim, original);
+        states.put(support, Blocks.BLUE_ICE.defaultBlockState());
+        LevelAccessor level = mutableLevel(states, support);
+        states.put(support, Blocks.AIR.defaultBlockState());
+        assertSame(original, states.get(rim), "Feature generation must still see the original slab");
+        states.put(support, Blocks.PACKED_ICE.defaultBlockState());
+        IcebergSlabCompatibility.removeUnsupportedSlab(level, rim, packedIce, blueIce, snow);
+        assertSame(original, states.get(rim), "A later restored support must keep the rim intact");
+    }
+
+    @Test
+    void taggedPostprocessingOffsetsRetainCoordinatesThroughNativeNbt() {
+        for (int x : new int[]{-17, -1, 0, 15, 16}) {
+            for (int y : new int[]{-64, -1, 0, 70, 319}) {
+                BlockPos pos = new BlockPos(x, y, -x);
+                short packed = (short) (ProtoChunk.packOffsetCoordinates(pos)
+                        | IcebergSlabCompatibility.POSTPROCESS_MARKER);
+                short stored = ShortTag.valueOf(packed).getAsShort();
+                assertNotEquals(0, stored & IcebergSlabCompatibility.POSTPROCESS_MARKER);
+                assertEquals(pos, ProtoChunk.unpackOffsetCoordinates(stored,
+                        SectionPos.blockToSectionCoord(y), new ChunkPos(pos)));
+            }
         }
     }
 
@@ -190,10 +212,9 @@ class IcebergSlabCompatibilityTest {
     }
 
     private static void carveSupport(LevelAccessor level, Map<BlockPos, BlockState> states, BlockPos support, BlockState carved) {
-        BlockState previous = states.put(support, carved);
-        if (IcebergSlabCompatibility.removesIcebergSupport(previous, carved)) {
-            IcebergSlabCompatibility.removeUnsupportedSlabs(level, support, packedIce, blueIce, snow);
-        }
+        states.put(support, carved);
+        IcebergSlabCompatibility.removeUnsupportedSlab(level, support.above(), packedIce, blueIce, snow);
+        IcebergSlabCompatibility.removeUnsupportedSlab(level, support.below(), packedIce, blueIce, snow);
     }
 
     private static LevelAccessor mutableLevel(Map<BlockPos, BlockState> states, BlockPos support) {

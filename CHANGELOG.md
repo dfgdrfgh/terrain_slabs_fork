@@ -3,7 +3,7 @@
 ## [3.1.5]
 
 ### Fixed
-- Restore the original iceberg placement and carving rules. Keep targeted cleanup for generated packed ice, blue ice and snow slabs whose supporting block is removed, preserving supported slabs, full terrain blocks and water.
+- Restore the original iceberg placement and carving rules. Check generated packed ice, blue ice and snow slabs during final chunk postprocessing instead of modifying blocks while features are still running. Preserve supported slabs, full terrain blocks and water.
 
 ## [3.1.3]
 

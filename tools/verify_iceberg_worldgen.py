@@ -84,6 +84,8 @@ def verify_world(directory, loader):
              'minecraft:bubble_column', 'minecraft:snow'}
     for chunk in read_chunks(directory / 'region'):
         chunks += 1
+        assert not any(packed & 0x8000 for section in chunk.get('PostProcessing', []) for packed in section), \
+            f'{loader}: a saved full chunk still contains pending ice rim checks'
         sections = {s['Y']: section_states(s) for s in chunk.get('sections', [])}
         for section_y, states in sections.items():
             for index, state in enumerate(states):
