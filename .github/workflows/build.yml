@@ -77,7 +77,7 @@ jobs:
                   assert error not in text, f'{loader}: {error}'
               print(f'{loader}: mixins and registries loaded; startup checkpoint reached', flush=True)
           PY
-      - name: Verify generated frozen-ocean worlds
+      - name: Verify ice rim support in completed frozen-ocean chunks
         run: python3 tools/verify_iceberg_worldgen.py
       - name: Upload regression logs
         if: always()
