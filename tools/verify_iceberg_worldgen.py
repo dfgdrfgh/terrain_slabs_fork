@@ -154,7 +154,7 @@ def prepare_world(run):
 
 def server_command(command):
     # Use the server console protocol because Gradle's JavaExec may not forward stdin.
-    with socket.create_connection(('127.0.0.1', 25580), timeout=10) as connection:
+    with socket.create_connection(('127.0.0.1', 25580), timeout=90) as connection:
         def send(kind, command):
             packet = struct.pack('<ii', 1, kind) + command.encode() + b'\0\0'
             connection.sendall(struct.pack('<i', len(packet)) + packet)
@@ -171,6 +171,8 @@ def server_command(command):
         packet = receive(struct.unpack('<i', receive(4))[0])
         assert struct.unpack('<i', packet[:4])[0] == 1, 'Fixture console authentication failed'
         send(2, command)
+        if command == 'stop':
+            return ''
         response = receive(struct.unpack('<i', receive(4))[0])
         return response[8:-2].decode('utf-8')
 
@@ -220,6 +222,16 @@ def main():
                     time.sleep(1)
                 assert saved, f'{loader}: server did not generate and save the fixture cleanly'
             finally:
+                if not saved and process.poll() is None:
+                    # Preserve native stacks if a load or console command stalls.
+                    listing = subprocess.run(['jcmd', '-l'], capture_output=True, text=True, timeout=10)
+                    for line in listing.stdout.splitlines():
+                        if 'Gradle' in line or 'JCmd' in line:
+                            continue
+                        pid = line.split()[0]
+                        dump = subprocess.run(['jcmd', pid, 'Thread.print'], capture_output=True,
+                                              text=True, timeout=10)
+                        print(dump.stdout, flush=True)
                 if process.poll() is None:
                     os.killpg(process.pid, signal.SIGTERM)
                     try:
