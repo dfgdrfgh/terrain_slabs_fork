@@ -6,7 +6,7 @@ license = "MIT"
 [[mods]]
 modId = "terrain_slabs"
 version = "${version}"
-displayName = "Terrain Slabs"
+displayName = "Countered's Terrain Slabs"
 authors = "Countered!"
 description = '''
 A Minecraft mod designed to smooth out terrain using custom slabs, improving the world generation and overall feel.
