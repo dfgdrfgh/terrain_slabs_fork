@@ -27,11 +27,13 @@ jobs:
       - name: Verify Fabric and NeoForge mixins load
         run: |
           python - <<'PY'
-          import os, pathlib, signal, subprocess, time
+          import os, pathlib, re, signal, subprocess, time
           for directory in ('run', 'fabric/run', 'neoforge/run'):
               path = pathlib.Path(directory)
               path.mkdir(parents=True, exist_ok=True)
               (path / 'eula.txt').write_text('eula=false\n')
+          def ready(text):
+              return 'You need to agree to the EULA' in text or re.search(r'Done \([^\n]*\)! For help, type', text) is not None
           for loader in ('fabric', 'neoforge'):
               log = pathlib.Path(f'{loader}-startup.log')
               with log.open('w') as output:
@@ -41,7 +43,7 @@ jobs:
                   try:
                       deadline = time.monotonic() + 240
                       while process.poll() is None and time.monotonic() < deadline:
-                          if 'You need to agree to the EULA' in log.read_text():
+                          if ready(log.read_text()):
                               break
                           time.sleep(1)
                   finally:
@@ -54,10 +56,11 @@ jobs:
                               process.wait()
               text = log.read_text()
               print(text, flush=True)
-              assert 'You need to agree to the EULA' in text, f'{loader} did not reach normal server bootstrap'
+              assert ready(text), f'{loader} did not reach normal server bootstrap'
+              assert 'Registering Mod Blocks & Items for terrain_slabs' in text, f'{loader} did not initialize Terrain Slabs'
               for error in ('Mixin apply failed', 'InvalidInjectionException', 'InjectionError', 'MixinTransformerError'):
                   assert error not in text, f'{loader}: {error}'
-              print(f'{loader}: mixins and registries loaded; stopped before creating a world', flush=True)
+              print(f'{loader}: mixins and registries loaded; startup checkpoint reached', flush=True)
           PY
       - name: Collect playable jars
         run: |
