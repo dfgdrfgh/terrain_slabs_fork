@@ -152,7 +152,7 @@ def prepare_world(run):
     return world
 
 
-def stop_server():
+def server_command(command):
     # Use the server console protocol because Gradle's JavaExec may not forward stdin.
     with socket.create_connection(('127.0.0.1', 25580), timeout=10) as connection:
         def send(kind, command):
@@ -170,7 +170,25 @@ def stop_server():
         send(3, 'iceberg-regression')
         packet = receive(struct.unpack('<i', receive(4))[0])
         assert struct.unpack('<i', packet[:4])[0] == 1, 'Fixture console authentication failed'
-        send(2, 'stop')
+        send(2, command)
+        response = receive(struct.unpack('<i', receive(4))[0])
+        return response[8:-2].decode('utf-8')
+
+
+def complete_fixture_chunks():
+    # Force a wider area through prepareTickingChunk, including both iceberg types.
+    # Spawn's smaller completed area may contain only packed ice for a given seed.
+    print(server_command('forceload add -96 -96 96 96'), flush=True)
+    check = ('execute if loaded -96 64 -96 if loaded -96 64 96 '
+             'if loaded 96 64 -96 if loaded 96 64 96 run say iceberg-fixture-ready')
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if 'iceberg-fixture-ready' in server_command(check):
+            # Chunk availability precedes its queued ticking/postprocessing task.
+            time.sleep(5)
+            return
+        time.sleep(1)
+    raise AssertionError('Forced frozen-ocean fixture chunks did not finish loading')
 
 
 def main():
@@ -189,9 +207,8 @@ def main():
                 while process.poll() is None and time.monotonic() < deadline:
                     text = log.read_text()
                     if ')! For help, type' in text:
-                        # Allow queued spawn-chunk postprocessing to finish its first ticks.
-                        time.sleep(2)
-                        stop_server()
+                        complete_fixture_chunks()
+                        server_command('stop')
                         save_deadline = time.monotonic() + 90
                         while time.monotonic() < save_deadline:
                             saved = 'All dimensions are saved' in log.read_text()
