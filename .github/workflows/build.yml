@@ -62,6 +62,18 @@ jobs:
                   assert error not in text, f'{loader}: {error}'
               print(f'{loader}: mixins and registries loaded; startup checkpoint reached', flush=True)
           PY
+      - name: Verify generated frozen-ocean worlds
+        run: python3 tools/verify_iceberg_worldgen.py
+      - name: Upload regression logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iceberg-regression-logs
+          path: |
+            *-startup.log
+            *-iceberg-worldgen.log
+            common/build/test-results/test/*.xml
+          if-no-files-found: warn
       - name: Collect playable jars
         run: |
           mkdir -p artifacts

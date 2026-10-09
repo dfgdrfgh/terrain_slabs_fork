@@ -54,6 +54,11 @@ class IcebergSlabCompatibilityTest {
             blueIce = new CustomSlab(BlockBehaviour.Properties.ofFullCopy(Blocks.BLUE_ICE));
             snow = new CustomSlab(BlockBehaviour.Properties.ofFullCopy(Blocks.SNOW_BLOCK));
             stone = new CustomSlab(BlockBehaviour.Properties.ofFullCopy(Blocks.STONE));
+            // Vanilla initializes these caches for registered blocks during bootstrap.
+            // Isolated fixtures need the same initialization for native fluid queries.
+            for (Block block : new Block[]{packedIce, blueIce, snow, stone}) {
+                block.getStateDefinition().getPossibleStates().forEach(BlockState::initCache);
+            }
         } finally {
             holders.set(BuiltInRegistries.BLOCK, oldHolders);
             frozen.set(BuiltInRegistries.BLOCK, oldFrozen);
