@@ -22,17 +22,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: Build Fabric and NeoForge
-        run: bash ./gradlew :fabric:build :neoforge:build --no-daemon
+      - name: Clean build Fabric and NeoForge
+        run: bash ./gradlew clean :fabric:build :neoforge:build --no-build-cache --no-daemon
       - name: Check worldgen preserves authored landscaping
         run: bash ./gradlew :fabric:runGameTest --no-daemon
-      - name: Collect playable jars
+      - name: Collect separate playable jars and checksums
+        shell: bash
         run: |
-          mkdir -p artifacts
-          find fabric/build/libs neoforge/build/libs -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev*.jar' -exec cp {} artifacts/ \;
-          test "$(find artifacts -name '*.jar' | wc -l)" -eq 2
-      - uses: actions/upload-artifact@v4
+          for platform in fabric neoforge; do
+            mkdir -p "artifacts/$platform"
+            mapfile -t jars < <(find "$platform/build/libs" -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev*.jar')
+            test "${#jars[@]}" -eq 1
+            cp "${jars[0]}" "artifacts/$platform/"
+            (cd "artifacts/$platform" && sha256sum *.jar > SHA256SUMS.txt)
+          done
+      - name: Upload Fabric download
+        uses: actions/upload-artifact@v4
         with:
-          name: terrain-slabs-1.21.1
-          path: artifacts/*.jar
+          name: terrain-slabs-fabric-1.21.1
+          path: artifacts/fabric/*
+          if-no-files-found: error
+      - name: Upload NeoForge download
+        uses: actions/upload-artifact@v4
+        with:
+          name: terrain-slabs-neoforge-1.21.1
+          path: artifacts/neoforge/*
           if-no-files-found: error
