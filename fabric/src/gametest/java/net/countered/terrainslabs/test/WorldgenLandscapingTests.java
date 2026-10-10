@@ -371,7 +371,7 @@ public class WorldgenLandscapingTests implements FabricGameTest {
                 helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.DIRT_SLAB.get()),
                         "Fixture must generate its dirt slab before the late grass exists");
                 level.setBlock(pos.offset(1, height, diagonal ? 1 : 0), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
-                SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos));
+                level.getChunkAt(pos).postProcessGeneration();
                 BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState().setValue(CustomSlab.GENERATED, true);
                 helper.assertTrue(level.getBlockState(pos).equals(expected),
                         "Late grass did not immediately green the generated step: height=" + height + ", diagonal=" + diagonal);
@@ -393,7 +393,7 @@ public class WorldgenLandscapingTests implements FabricGameTest {
                 level.setBlock(pos, dirt, 2);
                 if (!condition.equals("no_grass")) level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
                 if (condition.equals("covered")) level.setBlock(pos.above(), Blocks.STONE.defaultBlockState(), 2);
-                SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos));
+                level.getChunkAt(pos).postProcessGeneration();
                 BlockState expected = condition.equals("exposed")
                         ? ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
                                 .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, true)
@@ -405,7 +405,7 @@ public class WorldgenLandscapingTests implements FabricGameTest {
         BlockState authored = Blocks.POLISHED_TUFF_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.DOUBLE);
         level.setBlock(pos, authored, 2);
         level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
-        SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos));
+        level.getChunkAt(pos).postProcessGeneration();
         helper.assertTrue(level.getBlockState(pos).equals(authored), "Finishing pass replaced authored WWOO landscaping");
         helper.succeed();
     }
@@ -420,9 +420,34 @@ public class WorldgenLandscapingTests implements FabricGameTest {
         level.setBlock(pos, dirt, 2);
         level.setBlock(pos.west(), dirt, 2);
         level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
-        SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos.east()));
+        level.getChunkAt(pos.east()).postProcessGeneration();
         helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.GRASS_SLAB.get()), "Late neighboring chunk grass left a dirt seam");
         helper.assertTrue(level.getBlockState(pos.west()).equals(dirt), "One finishing pass must not spread recursively through the dirt field");
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "terrain_slabs_late_grass")
+    public void lateNeighborFeatureInsideChunkIsCorrectedBeforeTicking(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos fixture = helper.absolutePos(new BlockPos(3, 4, 3));
+        BlockPos pos = new BlockPos((fixture.getX() & ~15) + 8, fixture.getY(), (fixture.getZ() & ~15) + 8);
+        clearSurfaceFixture(level, pos);
+        BlockState grass = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState().setValue(CustomSlab.GENERATED, true);
+        level.setBlock(pos, grass, 2);
+        level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+        level.setBlock(pos.below(), Blocks.STONE.defaultBlockState(), 2);
+        // A disk feature from a neighboring chunk can reach beyond the one-block
+        // border visited by the former end-of-decoration cleanup.
+        DiskConfiguration config = new DiskConfiguration(
+                new RuleBasedBlockStateProvider(BlockStateProvider.simple(Blocks.DIRT), List.of()),
+                BlockPredicate.matchesBlocks(Blocks.STONE), ConstantInt.of(0), 0);
+        new DiskFeature(DiskConfiguration.CODEC).place(config, level,
+                level.getChunkSource().getGenerator(), RandomSource.create(7L), pos.below());
+        helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.DIRT_SLAB.get()), "Late feature must reproduce the dirt slab");
+        SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos.offset(16, 0, 0)));
+        helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.DIRT_SLAB.get()), "Old neighboring border pass must miss this interior slab");
+        level.getChunkAt(pos).postProcessGeneration();
+        helper.assertTrue(level.getBlockState(pos).equals(grass), "Chunk must become tickable with its exposed grass surface restored");
         helper.succeed();
     }
 
