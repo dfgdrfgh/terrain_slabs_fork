@@ -193,30 +193,8 @@ public class SlabFeature extends Feature<NoneFeatureConfiguration> {
         Block slab = ModSlabsMap.getSlabForBlock(level.getBlockState(pos.below()).getBlock());
         if (slab != ModBlocksRegistry.DIRT_SLAB.get()) return slab;
 
-        // Exposed steps beside a grass surface belong to that surface, even when
-        // the supporting layer is dirt. Keep submerged and covered soil as dirt.
-        BlockState current = level.getBlockState(pos);
-        BlockState above = level.getBlockState(pos.above());
-        if (!current.getFluidState().isEmpty() || !above.getFluidState().isEmpty()
-                || !above.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty()) return slab;
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
-            BlockPos neighborPos = pos.relative(direction);
-            BlockState neighbor = level.getBlockState(neighborPos);
-            if (neighbor.is(Blocks.GRASS_BLOCK) || isGeneratedGrassSlab(neighbor)) {
-                return ModBlocksRegistry.GRASS_SLAB.get();
-            }
-            // A preceding pass may already have lifted the neighboring grass
-            // surface onto a slab and converted its support block to dirt.
-            if (neighbor.is(Blocks.DIRT) && isGeneratedGrassSlab(level.getBlockState(neighborPos.above()))) {
-                return ModBlocksRegistry.GRASS_SLAB.get();
-            }
-        }
-        return slab;
-    }
-
-    private static boolean isGeneratedGrassSlab(BlockState state) {
-        return state.is(ModBlocksRegistry.GRASS_SLAB.get()) && state.getValue(CustomSlab.GENERATED)
-                && !state.getValue(SlabBlock.WATERLOGGED);
+        return SurfaceGrassSlabs.belongsToGrassSurface(level, pos)
+                ? ModBlocksRegistry.GRASS_SLAB.get() : slab;
     }
 
     private void placeBottomSlab(WorldGenLevel level, BlockPos pos, Block slab) {

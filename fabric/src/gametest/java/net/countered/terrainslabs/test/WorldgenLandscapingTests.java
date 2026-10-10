@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.generation.SlabFeature;
+import net.countered.terrainslabs.generation.SurfaceGrassSlabs;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.core.BlockPos;
@@ -347,6 +348,81 @@ public class WorldgenLandscapingTests implements FabricGameTest {
         level.setBlock(edge, authored, 2);
         placeSurfaceSteps(level, Set.of(edge));
         helper.assertTrue(level.getBlockState(edge).equals(authored), "Grass edge conversion replaced an authored WWOO slab");
+        helper.succeed();
+    }
+
+    private static void clearSurfaceFixture(ServerLevel level, BlockPos center) {
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                for (int y = -2; y <= 2; y++) level.setBlock(center.offset(x, y, z), Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "terrain_slabs_late_grass")
+    public void lateGrassDecorationGreensGeneratedStepsBeforeRandomTicks(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(3, 4, 3));
+        for (int height : List.of(-1, 0, 1)) {
+            for (boolean diagonal : List.of(false, true)) {
+                clearSurfaceFixture(level, pos);
+                level.setBlock(pos.below(), Blocks.DIRT.defaultBlockState(), 2);
+                placeSurfaceSteps(level, Set.of(pos));
+                helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.DIRT_SLAB.get()),
+                        "Fixture must generate its dirt slab before the late grass exists");
+                level.setBlock(pos.offset(1, height, diagonal ? 1 : 0), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+                SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos));
+                BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState().setValue(CustomSlab.GENERATED, true);
+                helper.assertTrue(level.getBlockState(pos).equals(expected),
+                        "Late grass did not immediately green the generated step: height=" + height + ", diagonal=" + diagonal);
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "terrain_slabs_late_grass")
+    public void finishingGrassPassPreservesCoveredWetAndUnmarkedSlabs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(3, 4, 3));
+        for (SlabType type : SlabType.values()) {
+            for (String condition : List.of("exposed", "covered", "wet", "unmarked", "no_grass")) {
+                clearSurfaceFixture(level, pos);
+                BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
+                        .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, condition.equals("wet"))
+                        .setValue(CustomSlab.GENERATED, !condition.equals("unmarked"));
+                level.setBlock(pos, dirt, 2);
+                if (!condition.equals("no_grass")) level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+                if (condition.equals("covered")) level.setBlock(pos.above(), Blocks.STONE.defaultBlockState(), 2);
+                SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos));
+                BlockState expected = condition.equals("exposed")
+                        ? ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
+                                .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, true)
+                        : dirt;
+                helper.assertTrue(level.getBlockState(pos).equals(expected), "Finishing pass changed wrong state: " + condition + " " + type);
+            }
+        }
+        clearSurfaceFixture(level, pos);
+        BlockState authored = Blocks.POLISHED_TUFF_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.DOUBLE);
+        level.setBlock(pos, authored, 2);
+        level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+        SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos));
+        helper.assertTrue(level.getBlockState(pos).equals(authored), "Finishing pass replaced authored WWOO landscaping");
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "terrain_slabs_late_grass")
+    public void lateGrassAcrossChunkEdgeGreensExistingGeneratedStep(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos fixture = helper.absolutePos(new BlockPos(3, 4, 3));
+        BlockPos pos = new BlockPos((fixture.getX() & ~15) + 15, fixture.getY(), fixture.getZ());
+        clearSurfaceFixture(level, pos);
+        BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState().setValue(CustomSlab.GENERATED, true);
+        level.setBlock(pos, dirt, 2);
+        level.setBlock(pos.west(), dirt, 2);
+        level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+        SurfaceGrassSlabs.finishDecoration(level, level.getChunkAt(pos.east()));
+        helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.GRASS_SLAB.get()), "Late neighboring chunk grass left a dirt seam");
+        helper.assertTrue(level.getBlockState(pos.west()).equals(dirt), "One finishing pass must not spread recursively through the dirt field");
         helper.succeed();
     }
 

@@ -10,6 +10,7 @@
     "feature.MixinDiskFeature",
     "feature.MixinOreFeature",
     "feature.WorldGenRegionMixin",
+    "feature.ChunkGeneratorMixin",
     "ontop.place.MixinBushBlock",
     "ontop.place.MixinSeagrassBlock",
     "ontop.place.MixinSnowLayer",
