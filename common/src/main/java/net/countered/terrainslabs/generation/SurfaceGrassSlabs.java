@@ -1,7 +1,9 @@
 package net.countered.terrainslabs.generation;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.Queue;
+import java.util.Set;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
 import net.countered.terrainslabs.util.MixinHelper;
@@ -27,7 +29,9 @@ public final class SurfaceGrassSlabs {
             for (int dz = -1; dz <= 1; dz++) {
                 if (dx == 0 && dz == 0) continue;
                 for (int dy = -1; dy <= 1; dy++) {
-                    BlockState neighbor = level.getBlockState(pos.offset(dx, dy, dz));
+                    BlockPos neighborPos = pos.offset(dx, dy, dz);
+                    if (!level.hasChunk(neighborPos.getX() >> 4, neighborPos.getZ() >> 4)) continue;
+                    BlockState neighbor = level.getBlockState(neighborPos);
                     if (neighbor.is(Blocks.GRASS_BLOCK)
                             || (neighbor.is(ModBlocksRegistry.GRASS_SLAB.get())
                             && !neighbor.getValue(SlabBlock.WATERLOGGED))) return true;
@@ -43,7 +47,8 @@ public final class SurfaceGrassSlabs {
     }
 
     public static void finishDecoration(WorldGenLevel level, ChunkAccess center) {
-        List<BlockPos> grassPositions = new ArrayList<>();
+        Queue<BlockPos> grassPositions = new ArrayDeque<>();
+        Set<BlockPos> queued = new HashSet<>();
         // Include the adjoining edge of neighboring chunks. Their slabs may
         // have been made before this chunk's grass decoration was available.
         for (int dx = -1; dx <= 1; dx++) {
@@ -66,19 +71,32 @@ public final class SurfaceGrassSlabs {
                             for (int y = 0; y < 16; y++) {
                                 if (!isGeneratedDirt(section.getBlockState(x, y, z))) continue;
                                 BlockPos pos = new BlockPos(cx * 16 + x, baseY + y, cz * 16 + z);
-                                if (belongsToGrassSurface(level, pos)) grassPositions.add(pos);
+                                if (belongsToGrassSurface(level, pos) && queued.add(pos)) grassPositions.add(pos);
                             }
                         }
                     }
                 }
             }
         }
-        // Snapshot the candidates so the finishing pass does not spread grass
-        // through an entire dirt field as it traverses the sections.
-        for (BlockPos pos : grassPositions) {
+        // Finish the connected exposed steps too. A single snapshot leaves
+        // another dirt seam beside each newly restored grass slab. Only visit
+        // chunks already available; never load more terrain for this repair.
+        while (!grassPositions.isEmpty()) {
+            BlockPos pos = grassPositions.remove();
             BlockState state = level.getBlockState(pos);
-            if (isGeneratedDirt(state)) {
+            if (isGeneratedDirt(state) && belongsToGrassSurface(level, pos)) {
                 level.setBlock(pos, MixinHelper.withCopiedSlabProperties(state, ModBlocksRegistry.GRASS_SLAB.get()), 2);
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dz == 0) continue;
+                        for (int dy = -1; dy <= 1; dy++) {
+                            BlockPos neighbor = pos.offset(dx, dy, dz);
+                            if (level.hasChunk(neighbor.getX() >> 4, neighbor.getZ() >> 4)
+                                    && isGeneratedDirt(level.getBlockState(neighbor))
+                                    && queued.add(neighbor)) grassPositions.add(neighbor);
+                        }
+                    }
+                }
             }
         }
     }

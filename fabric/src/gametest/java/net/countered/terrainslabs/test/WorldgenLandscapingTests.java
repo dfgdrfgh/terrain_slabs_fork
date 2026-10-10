@@ -422,7 +422,7 @@ public class WorldgenLandscapingTests implements FabricGameTest {
         level.setBlock(pos.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
         level.getChunkAt(pos.east()).postProcessGeneration();
         helper.assertTrue(level.getBlockState(pos).is(ModBlocksRegistry.GRASS_SLAB.get()), "Late neighboring chunk grass left a dirt seam");
-        helper.assertTrue(level.getBlockState(pos.west()).equals(dirt), "One finishing pass must not spread recursively through the dirt field");
+        helper.assertTrue(level.getBlockState(pos.west()).is(ModBlocksRegistry.GRASS_SLAB.get()), "Connected exposed step must finish as grass too");
         helper.succeed();
     }
 
@@ -451,4 +451,36 @@ public class WorldgenLandscapingTests implements FabricGameTest {
         helper.succeed();
     }
 
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "terrain_slabs_late_grass")
+    public void finishingGrassPassCompletesConnectedStepsWithoutCrossingCoveredOrUnmarkedGaps(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos fixture = helper.absolutePos(new BlockPos(3, 4, 3));
+        BlockPos pos = new BlockPos((fixture.getX() & ~15) + 8, fixture.getY(), (fixture.getZ() & ~15) + 8);
+        for (String barrier : List.of("covered", "wet", "unmarked", "air")) {
+            for (int x = -1; x <= 6; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    for (int y = -2; y <= 2; y++) level.setBlock(pos.offset(x, y, z), Blocks.AIR.defaultBlockState(), 2);
+                }
+            }
+            BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState().setValue(CustomSlab.GENERATED, true);
+            level.setBlock(pos, Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+            for (int x = 1; x <= 6; x++) level.setBlock(pos.offset(x, 0, 0), dirt, 2);
+            BlockPos gap = pos.offset(4, 0, 0);
+            if (barrier.equals("covered")) level.setBlock(gap.above(), Blocks.STONE.defaultBlockState(), 2);
+            if (barrier.equals("wet")) level.setBlock(gap, dirt.setValue(SlabBlock.WATERLOGGED, true), 2);
+            if (barrier.equals("unmarked")) level.setBlock(gap, dirt.setValue(CustomSlab.GENERATED, false), 2);
+            if (barrier.equals("air")) level.setBlock(gap, Blocks.AIR.defaultBlockState(), 2);
+            BlockState unchangedGap = level.getBlockState(gap);
+            level.getChunkAt(pos).postProcessGeneration();
+            for (int x = 1; x <= 3; x++) {
+                helper.assertTrue(level.getBlockState(pos.offset(x, 0, 0)).is(ModBlocksRegistry.GRASS_SLAB.get()),
+                        "Connected surface still contains dirt before random ticks: " + barrier + " x=" + x);
+            }
+            helper.assertTrue(level.getBlockState(gap).equals(unchangedGap), "Changed barrier " + barrier);
+            for (int x = 5; x <= 6; x++) {
+                helper.assertTrue(level.getBlockState(pos.offset(x, 0, 0)).equals(dirt), "Crossed the " + barrier + " gap");
+            }
+        }
+        helper.succeed();
+    }
 }
