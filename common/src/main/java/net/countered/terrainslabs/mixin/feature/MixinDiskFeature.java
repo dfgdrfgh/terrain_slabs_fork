@@ -7,7 +7,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.feature.DiskFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.DiskConfiguration;
@@ -52,7 +51,7 @@ public class MixinDiskFeature {
 
         BlockState currentState = level.getBlockState(targetPos);
 
-        if (currentState.getBlock() instanceof SlabBlock && !currentState.is(newSlabBlock)) {
+        if (MixinHelper.isGeneratedTerrainSlab(currentState) && !currentState.is(newSlabBlock)) {
             level.setBlock(targetPos, MixinHelper.withCopiedSlabProperties(currentState, newSlabBlock), 2);
         }
     }

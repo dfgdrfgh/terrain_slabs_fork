@@ -1,0 +1,143 @@
+package net.countered.terrainslabs.test;
+
+import java.lang.reflect.Method;
+import java.util.List;
+import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
+import net.countered.terrainslabs.generation.SlabFeature;
+import net.countered.terrainslabs.registries.ModBlocksRegistry;
+import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.util.valueproviders.ConstantInt;
+import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+import net.minecraft.world.level.levelgen.feature.DiskFeature;
+import net.minecraft.world.level.levelgen.feature.OreFeature;
+import net.minecraft.world.level.levelgen.feature.configurations.DiskConfiguration;
+import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
+import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.RuleBasedBlockStateProvider;
+import net.minecraft.world.level.levelgen.structure.templatesystem.BlockMatchTest;
+
+public class WorldgenLandscapingTests implements FabricGameTest {
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void diskPreservesLandscapingAndUpdatesGeneratedSlabs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (SlabType type : SlabType.values()) {
+            for (Block block : List.of(Blocks.POLISHED_TUFF_SLAB, Blocks.TUFF_BRICK_SLAB)) {
+                BlockPos center = helper.absolutePos(new BlockPos(3, 3, 3));
+                BlockState authored = block.defaultBlockState().setValue(SlabBlock.TYPE, type)
+                        .setValue(SlabBlock.WATERLOGGED, true);
+                BlockState generated = ModBlocksRegistry.CUSTOM_STONE_SLAB.get().defaultBlockState()
+                        .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, true)
+                        .setValue(CustomSlab.GENERATED, true);
+                level.setBlock(center, Blocks.DIRT.defaultBlockState(), 2);
+                level.setBlock(center.above(), authored, 2);
+                level.setBlock(center.below(), generated, 2);
+                placeDisk(level, center);
+                helper.assertTrue(level.getBlockState(center).is(Blocks.CLAY), "Disk must place its material");
+                helper.assertTrue(level.getBlockState(center.above()).equals(authored), "Disk changed WWOO slab " + block + " " + type);
+                BlockState expected = ModBlocksRegistry.CLAY_SLAB.get().defaultBlockState()
+                        .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, true)
+                        .setValue(CustomSlab.GENERATED, true);
+                helper.assertTrue(level.getBlockState(center.below()).equals(expected), "Generated slab must change material and retain its properties");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void diskPreservesPlacedTerrainSlabs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos center = helper.absolutePos(new BlockPos(3, 3, 3));
+        BlockState placed = ModBlocksRegistry.CUSTOM_STONE_SLAB.get().defaultBlockState();
+        level.setBlock(center, Blocks.DIRT.defaultBlockState(), 2);
+        level.setBlock(center.above(), placed, 2);
+        level.setBlock(center.below(), placed, 2);
+        placeDisk(level, center);
+        helper.assertTrue(level.getBlockState(center).is(Blocks.CLAY), "Disk must place its material");
+        helper.assertTrue(level.getBlockState(center.above()).equals(placed), "Disk changed an unmarked upper slab");
+        helper.assertTrue(level.getBlockState(center.below()).equals(placed), "Disk changed an unmarked lower slab");
+        helper.succeed();
+    }
+
+    private static void placeDisk(ServerLevel level, BlockPos center) {
+        DiskConfiguration config = new DiskConfiguration(
+                new RuleBasedBlockStateProvider(BlockStateProvider.simple(Blocks.CLAY), List.of()),
+                BlockPredicate.matchesBlocks(Blocks.DIRT), ConstantInt.of(0), 0);
+        new DiskFeature(DiskConfiguration.CODEC).place(config, level,
+                level.getChunkSource().getGenerator(), RandomSource.create(7L), center);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void undersidePassPreservesSlabsAndDecorativeFullBlocks(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        BlockPos center = helper.absolutePos(new BlockPos(3, 3, 3));
+        SlabFeature feature = new SlabFeature(NoneFeatureConfiguration.CODEC);
+        Method eligible = SlabFeature.class.getDeclaredMethod("shouldPlaceTopSlab", WorldGenLevel.class, BlockPos.class);
+        Method place = SlabFeature.class.getDeclaredMethod("placeTopSlab", WorldGenLevel.class, BlockPos.class);
+        eligible.setAccessible(true);
+        place.setAccessible(true);
+        // A valid cave lip: the old pass would shrink every full-shape state
+        // below the dirt ceiling, including WWOO's double slabs and tuff bricks.
+        level.setBlock(center.above(), Blocks.DIRT.defaultBlockState(), 2);
+        level.setBlock(center.below(), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(center.east(), Blocks.DIRT.defaultBlockState(), 2);
+        level.setBlock(center.east().below(), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(center.west(), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(center.west().above(), Blocks.DIRT.defaultBlockState(), 2);
+        for (Block block : List.of(Blocks.POLISHED_TUFF_SLAB, Blocks.TUFF_BRICK_SLAB,
+                Blocks.TUFF_BRICKS, Blocks.CHISELED_TUFF, Blocks.CHISELED_TUFF_BRICKS)) {
+            for (SlabType type : SlabType.values()) {
+                BlockState authored = block.defaultBlockState();
+                if (authored.hasProperty(SlabBlock.TYPE)) authored = authored.setValue(SlabBlock.TYPE, type);
+                level.setBlock(center, authored, 2);
+                helper.assertTrue(!(boolean) eligible.invoke(feature, level, center), "Underside pass selected authored " + authored);
+                place.invoke(feature, level, center);
+                helper.assertTrue(level.getBlockState(center).equals(authored), "Underside pass replaced authored " + authored);
+            }
+        }
+        level.setBlock(center, Blocks.STONE.defaultBlockState(), 2);
+        helper.assertTrue((boolean) eligible.invoke(feature, level, center), "Natural terrain must still qualify");
+        place.invoke(feature, level, center);
+        helper.assertTrue(level.getBlockState(center).is(ModBlocksRegistry.DIRT_SLAB.get()), "Natural terrain should still get an underside slab");
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "terrain_slabs_ore")
+    public void orePreservesAuthoredSlabs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos center = helper.absolutePos(new BlockPos(4, 5, 4));
+        BlockState authored = Blocks.POLISHED_TUFF_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.DOUBLE);
+        for (int x = -4; x <= 4; x++) {
+            for (int z = -4; z <= 4; z++) {
+                for (int y = -3; y <= 3; y++) level.setBlock(center.offset(x, y, z), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(center.offset(x, -1, z), authored, 2);
+                level.setBlock(center.offset(x, 1, z), authored, 2);
+            }
+        }
+        OreConfiguration config = new OreConfiguration(new BlockMatchTest(Blocks.STONE), Blocks.ANDESITE.defaultBlockState(), 64);
+        boolean changed = false;
+        for (int i = 0; i < 8; i++) {
+            changed |= new OreFeature(OreConfiguration.CODEC).place(config, level,
+                    level.getChunkSource().getGenerator(), RandomSource.create(i), center);
+        }
+        helper.assertTrue(changed, "Ore feature must actually place blocks");
+        for (int x = -4; x <= 4; x++) {
+            for (int z = -4; z <= 4; z++) {
+                helper.assertTrue(level.getBlockState(center.offset(x, -1, z)).equals(authored), "Ore replaced a lower authored slab");
+                helper.assertTrue(level.getBlockState(center.offset(x, 1, z)).equals(authored), "Ore replaced an upper authored slab");
+            }
+        }
+        helper.succeed();
+    }
+}

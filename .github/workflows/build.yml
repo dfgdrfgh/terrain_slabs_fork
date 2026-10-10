@@ -24,6 +24,8 @@ jobs:
           cache-read-only: false
       - name: Build Fabric and NeoForge
         run: bash ./gradlew :fabric:build :neoforge:build --no-daemon
+      - name: Check worldgen preserves authored landscaping
+        run: bash ./gradlew :fabric:runGameTest --no-daemon
       - name: Collect playable jars
         run: |
           mkdir -p artifacts

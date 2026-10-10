@@ -102,3 +102,13 @@ shadowJar {
 remapJar {
     inputFile.set shadowJar.archiveFile
 }
+
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "terrain_slabs_test"
+        enableGameTests = true
+        enableClientGameTests = false
+        eula = true
+    }
+}

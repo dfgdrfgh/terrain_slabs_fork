@@ -8,7 +8,6 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.BulkSectionAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -63,7 +62,7 @@ public abstract class MixinOreFeature {
 
         BlockState currentState = access.getBlockState(pos);
 
-        if (currentState.getBlock() instanceof SlabBlock && !currentState.is(newSlabBlock)) {
+        if (MixinHelper.isGeneratedTerrainSlab(currentState) && !currentState.is(newSlabBlock)) {
             BlockState newState = MixinHelper.withCopiedSlabProperties(currentState, newSlabBlock);
 
             LevelChunkSection section = access.getSection(pos);

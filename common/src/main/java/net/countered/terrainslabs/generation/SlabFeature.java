@@ -237,7 +237,11 @@ public class SlabFeature extends Feature<NoneFeatureConfiguration> {
         BlockPos blockBelowPos = currentPos.below();
         BlockState currentBlockState = level.getBlockState(currentPos);
 
+        // Preserve authored slabs, including double slabs with a full collision shape.
+        if (currentBlockState.getBlock() instanceof SlabBlock) return false;
         if (!currentBlockState.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) return false;
+        // Decorative blocks from other features are not terrain to smooth.
+        if (ModSlabsMap.getSlabForBlock(currentBlockState.getBlock()) == null) return false;
 
         BlockState blockBelowState = level.getBlockState(blockBelowPos);
         if(blockBelowState.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) return false;
@@ -284,6 +288,10 @@ public class SlabFeature extends Feature<NoneFeatureConfiguration> {
     }
 
     private void placeTopSlab(WorldGenLevel level, BlockPos pos) {
+        BlockState currentState = level.getBlockState(pos);
+        if (currentState.getBlock() instanceof SlabBlock
+                || ModSlabsMap.getSlabForBlock(currentState.getBlock()) == null) return;
+
         Boolean waterlogged = isTopStateWaterlogged(level, pos);
         BlockState blockAboveState = level.getBlockState(pos.above());
 
