@@ -2,6 +2,7 @@ package net.countered.terrainslabs.block.customslabs.soilslabs;
 
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
+import net.countered.terrainslabs.util.MixinHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -132,15 +133,18 @@ public class GrassSlab extends CustomSlab implements ISoilSlab {
     @Override
     public void randomTick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
         if (!canBeGrass(state, level, pos)) {
-            level.setBlockAndUpdate(pos, baseSlabBlock().setValue(TYPE, state.getValue(TYPE)));
+            level.setBlockAndUpdate(pos, MixinHelper.withCopiedSlabProperties(state, baseSlabBlock().getBlock()));
         } else {
             if (level.getMaxLocalRawBrightness(pos.above()) >= 9) {
-                BlockState blockState = this.defaultBlockState().setValue(TYPE, level.getBlockState(pos).getValue(TYPE));
+                BlockState blockState = this.defaultBlockState();
 
                 for (int i = 0; i < 4; i++) {
                     BlockPos blockPos = pos.offset(random.nextInt(3) - 1, random.nextInt(5) - 3, random.nextInt(3) - 1);
-                    if (level.getBlockState(blockPos).is(ModBlocksRegistry.DIRT_SLAB.get()) && canPropagate(blockState, level, blockPos)) {
-                        level.setBlockAndUpdate(blockPos, blockState.setValue(SNOWY, level.getBlockState(blockPos.above()).is(Blocks.SNOW)).setValue(TYPE, level.getBlockState(pos).getValue(TYPE)));
+                    BlockState target = level.getBlockState(blockPos);
+                    if (target.is(ModBlocksRegistry.DIRT_SLAB.get()) && !target.getValue(WATERLOGGED)
+                            && canPropagate(blockState, level, blockPos)) {
+                        level.setBlockAndUpdate(blockPos, MixinHelper.withCopiedSlabProperties(target, this)
+                                .setValue(SNOWY, level.getBlockState(blockPos.above()).is(Blocks.SNOW)));
                     }
                 }
             }

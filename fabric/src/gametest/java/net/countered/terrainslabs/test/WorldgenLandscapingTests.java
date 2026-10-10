@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.levelgen.blockpredicates.BlockPredicate;
+import net.minecraft.world.level.levelgen.LegacyRandomSource;
 import net.minecraft.world.level.levelgen.feature.DiskFeature;
 import net.minecraft.world.level.levelgen.feature.OreFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.DiskConfiguration;
@@ -136,6 +137,129 @@ public class WorldgenLandscapingTests implements FabricGameTest {
             for (int z = -4; z <= 4; z++) {
                 helper.assertTrue(level.getBlockState(center.offset(x, -1, z)).equals(authored), "Ore replaced a lower authored slab");
                 helper.assertTrue(level.getBlockState(center.offset(x, 1, z)).equals(authored), "Ore replaced an upper authored slab");
+            }
+        }
+        helper.succeed();
+    }
+
+    // Always select the eastern neighbor, so propagation tests do not rely on
+    // waiting for random ticks to happen to pick the fixture.
+    private static RandomSource eastNeighborRandom() {
+        return new LegacyRandomSource(0L) {
+            private int coordinate;
+
+            @Override
+            public int nextInt(int bound) {
+                int value = switch (coordinate++ % 3) {
+                    case 0 -> 2;
+                    case 1 -> 3;
+                    default -> 1;
+                };
+                if (value >= bound) throw new AssertionError("Unexpected propagation random bound: " + bound);
+                return value;
+            }
+        };
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void fullGrassSpreadsOntoDirtSlabs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos source = helper.absolutePos(new BlockPos(2, 3, 2));
+        BlockPos target = source.east();
+        level.setBlock(source, Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+        level.setBlock(source.above(), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(target.above(), Blocks.AIR.defaultBlockState(), 2);
+        helper.runAfterDelay(5, () -> {
+            helper.assertTrue(level.getMaxLocalRawBrightness(source.above()) >= 9, "Fixture must have light for vanilla grass spreading");
+            for (SlabType type : SlabType.values()) {
+                for (boolean generated : List.of(false, true)) {
+                    BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
+                            .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
+                    level.setBlock(target, dirt, 2);
+                    Blocks.GRASS_BLOCK.randomTick(level.getBlockState(source), level, source, eastNeighborRandom());
+                    BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
+                            .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
+                    helper.assertTrue(level.getBlockState(target).equals(expected), "Full grass failed to spread onto " + dirt);
+                }
+            }
+            level.setBlock(target, Blocks.DIRT.defaultBlockState(), 2);
+            Blocks.GRASS_BLOCK.randomTick(level.getBlockState(source), level, source, eastNeighborRandom());
+            helper.assertTrue(level.getBlockState(target).is(Blocks.GRASS_BLOCK), "Ordinary full-block spreading must still work");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void slabGrassPreservesTargetShapeWhenSpreading(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos source = helper.absolutePos(new BlockPos(2, 3, 2));
+        BlockPos target = source.east();
+        BlockState grass = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState();
+        level.setBlock(source, grass, 2);
+        level.setBlock(source.above(), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(target.above(), Blocks.AIR.defaultBlockState(), 2);
+        helper.runAfterDelay(5, () -> {
+            helper.assertTrue(level.getMaxLocalRawBrightness(source.above()) >= 9, "Fixture must have light for slab grass spreading");
+            for (SlabType type : SlabType.values()) {
+                for (boolean generated : List.of(false, true)) {
+                    BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
+                            .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
+                    level.setBlock(target, dirt, 2);
+                    grass.getBlock().randomTick(grass, level, source, eastNeighborRandom());
+                    BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
+                            .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
+                    helper.assertTrue(level.getBlockState(target).equals(expected), "Slab grass changed target shape or marker: " + dirt);
+                }
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void grassDoesNotSpreadOntoWetOrCoveredSlabs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos source = helper.absolutePos(new BlockPos(2, 3, 2));
+        BlockPos target = source.east();
+        level.setBlock(source.above(), Blocks.AIR.defaultBlockState(), 2);
+        helper.runAfterDelay(5, () -> {
+            helper.assertTrue(level.getMaxLocalRawBrightness(source.above()) >= 9, "Fixture must have light so only the target condition blocks growth");
+            for (BlockState grass : List.of(Blocks.GRASS_BLOCK.defaultBlockState(),
+                    ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState())) {
+                level.setBlock(source, grass, 2);
+                BlockState wet = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
+                        .setValue(SlabBlock.WATERLOGGED, true).setValue(CustomSlab.GENERATED, true);
+                level.setBlock(target.above(), Blocks.AIR.defaultBlockState(), 2);
+                level.setBlock(target, wet, 2);
+                grass.getBlock().randomTick(grass, level, source, eastNeighborRandom());
+                helper.assertTrue(level.getBlockState(target).equals(wet), "Grass spread onto a waterlogged slab");
+                BlockState dry = wet.setValue(SlabBlock.WATERLOGGED, false);
+                level.setBlock(target, dry, 2);
+                level.setBlock(target.above(), Blocks.STONE.defaultBlockState(), 2);
+                grass.getBlock().randomTick(grass, level, source, eastNeighborRandom());
+                helper.assertTrue(level.getBlockState(target).equals(dry), "Grass spread under a solid cover");
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void grassDecayPreservesSlabProperties(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(2, 3, 2));
+        level.setBlock(pos.above(), Blocks.STONE.defaultBlockState(), 2);
+        for (SlabType type : SlabType.values()) {
+            for (boolean waterlogged : List.of(false, true)) {
+                for (boolean generated : List.of(false, true)) {
+                    BlockState grass = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
+                            .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, waterlogged)
+                            .setValue(CustomSlab.GENERATED, generated);
+                    level.setBlock(pos, grass, 2);
+                    grass.getBlock().randomTick(grass, level, pos, eastNeighborRandom());
+                    BlockState expected = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
+                            .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, waterlogged)
+                            .setValue(CustomSlab.GENERATED, generated);
+                    helper.assertTrue(level.getBlockState(pos).equals(expected), "Grass decay changed slab properties: " + grass);
+                }
             }
         }
         helper.succeed();

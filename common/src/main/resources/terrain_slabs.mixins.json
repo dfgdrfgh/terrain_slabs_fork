@@ -16,7 +16,8 @@
     "ontop.render.MixinBlockStateBase",
     "ontop.render.target.MixinRaytrace",
     "shovel.MixinShovelItem",
-    "shovel.ShovelItemAccessor"
+    "shovel.ShovelItemAccessor",
+    "blocks.SpreadingSnowyDirtBlockMixin"
   ],
   "injectors": {
     "defaultRequire": 1
