@@ -2,6 +2,8 @@ package net.countered.terrainslabs.test;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import net.countered.terrainslabs.block.customslabs.specialslabs.CustomSlab;
 import net.countered.terrainslabs.generation.SlabFeature;
 import net.countered.terrainslabs.registries.ModBlocksRegistry;
@@ -264,4 +266,88 @@ public class WorldgenLandscapingTests implements FabricGameTest {
         }
         helper.succeed();
     }
+    private static void placeSurfaceSteps(ServerLevel level, Set<BlockPos> positions) throws Exception {
+        SlabFeature feature = new SlabFeature(NoneFeatureConfiguration.CODEC);
+        Method place = SlabFeature.class.getDeclaredMethod("placeBottomSlabs", WorldGenLevel.class, Set.class);
+        place.setAccessible(true);
+        place.invoke(feature, level, positions);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void grassEdgesGenerateAsGrassImmediatelyInEitherOrder(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        BlockPos edge = helper.absolutePos(new BlockPos(2, 3, 2));
+        BlockPos upper = edge.east().above();
+        for (boolean upperFirst : List.of(false, true)) {
+            level.setBlock(edge.below(), Blocks.DIRT.defaultBlockState(), 2);
+            level.setBlock(edge, Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(edge.above(), Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(edge.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+            level.setBlock(upper, Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(upper.above(), Blocks.AIR.defaultBlockState(), 2);
+            Set<BlockPos> positions = new LinkedHashSet<>(upperFirst ? List.of(upper, edge) : List.of(edge, upper));
+            placeSurfaceSteps(level, positions);
+            for (BlockPos pos : positions) {
+                BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
+                        .setValue(CustomSlab.GENERATED, true);
+                helper.assertTrue(level.getBlockState(pos).equals(expected),
+                        "Grass edge generated dirt before any random tick; upperFirst=" + upperFirst);
+                helper.assertTrue(level.getBlockState(pos.below()).is(Blocks.DIRT), "Grass slab must retain dirt support");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void extendedGrassStepsGenerateAsGrassImmediately(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        BlockPos edge = helper.absolutePos(new BlockPos(3, 3, 3));
+        BlockState generatedGrass = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
+                .setValue(CustomSlab.GENERATED, true);
+        for (boolean raisedNeighbor : List.of(false, true)) {
+            level.setBlock(edge.below(), Blocks.DIRT.defaultBlockState(), 2);
+            level.setBlock(edge, Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(edge.above(), Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(edge.east(), raisedNeighbor ? Blocks.DIRT.defaultBlockState() : generatedGrass, 2);
+            level.setBlock(edge.east().above(), raisedNeighbor ? generatedGrass : Blocks.AIR.defaultBlockState(), 2);
+            placeSurfaceSteps(level, Set.of(edge));
+            helper.assertTrue(level.getBlockState(edge).equals(generatedGrass),
+                    "Extended/corner step lost grass from an already smoothed surface");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void grassEdgeGenerationKeepsOtherMaterialsAndAuthoredSlabs(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        BlockPos edge = helper.absolutePos(new BlockPos(3, 3, 3));
+        level.setBlock(edge.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+        level.setBlock(edge.east().above(), Blocks.AIR.defaultBlockState(), 2);
+        for (Block substrate : List.of(Blocks.DIRT, Blocks.COARSE_DIRT, Blocks.STONE)) {
+            for (String condition : List.of("dry", "water", "covered", "no_grass")) {
+                level.setBlock(edge.below(), substrate.defaultBlockState(), 2);
+                level.setBlock(edge, condition.equals("water") ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+                level.setBlock(edge.above(), condition.equals("covered") ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+                level.setBlock(edge.east(), condition.equals("no_grass") ? Blocks.DIRT.defaultBlockState() : Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+                placeSurfaceSteps(level, Set.of(edge));
+                Block expected = substrate == Blocks.DIRT && condition.equals("dry")
+                        ? ModBlocksRegistry.GRASS_SLAB.get()
+                        : net.countered.terrainslabs.block.ModSlabsMap.getSlabForBlock(substrate);
+                BlockState state = level.getBlockState(edge);
+                helper.assertTrue(state.is(expected), "Wrong surface material for " + substrate + " " + condition);
+                helper.assertTrue(state.getValue(SlabBlock.TYPE) == SlabType.BOTTOM && state.getValue(CustomSlab.GENERATED),
+                        "Surface step must retain bottom shape and generation marker");
+                helper.assertTrue(state.getValue(SlabBlock.WATERLOGGED) == condition.equals("water"), "Surface step lost waterlogging");
+            }
+        }
+        BlockState authored = Blocks.POLISHED_TUFF_SLAB.defaultBlockState();
+        level.setBlock(edge.below(), Blocks.DIRT.defaultBlockState(), 2);
+        level.setBlock(edge.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+        level.setBlock(edge.above(), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(edge, authored, 2);
+        placeSurfaceSteps(level, Set.of(edge));
+        helper.assertTrue(level.getBlockState(edge).equals(authored), "Grass edge conversion replaced an authored WWOO slab");
+        helper.succeed();
+    }
+
 }

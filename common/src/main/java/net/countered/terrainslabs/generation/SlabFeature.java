@@ -80,8 +80,15 @@ public class SlabFeature extends Feature<NoneFeatureConfiguration> {
     }
 
     private void placeBottomSlabs(WorldGenLevel level, Set<BlockPos> slabPositions) {
+        // Resolve materials before any placement converts grass support blocks to dirt.
+        // Otherwise the order of the candidate set changes which steps keep grass.
+        Map<BlockPos, Block> materials = new HashMap<>();
         for (BlockPos pos : slabPositions) {
-            placeBottomSlab(level, pos);
+            Block slab = getBottomSlabMaterial(level, pos);
+            if (slab != null) materials.put(pos, slab);
+        }
+        for (Map.Entry<BlockPos, Block> entry : materials.entrySet()) {
+            placeBottomSlab(level, entry.getKey(), entry.getValue());
         }
     }
 
@@ -182,19 +189,44 @@ public class SlabFeature extends Feature<NoneFeatureConfiguration> {
         return validNeighbors;
     }
 
-    private void placeBottomSlab(WorldGenLevel level, BlockPos pos) {
+    private Block getBottomSlabMaterial(WorldGenLevel level, BlockPos pos) {
+        Block slab = ModSlabsMap.getSlabForBlock(level.getBlockState(pos.below()).getBlock());
+        if (slab != ModBlocksRegistry.DIRT_SLAB.get()) return slab;
+
+        // Exposed steps beside a grass surface belong to that surface, even when
+        // the supporting layer is dirt. Keep submerged and covered soil as dirt.
+        BlockState current = level.getBlockState(pos);
+        BlockState above = level.getBlockState(pos.above());
+        if (!current.getFluidState().isEmpty() || !above.getFluidState().isEmpty()
+                || !above.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty()) return slab;
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos neighborPos = pos.relative(direction);
+            BlockState neighbor = level.getBlockState(neighborPos);
+            if (neighbor.is(Blocks.GRASS_BLOCK) || isGeneratedGrassSlab(neighbor)) {
+                return ModBlocksRegistry.GRASS_SLAB.get();
+            }
+            // A preceding pass may already have lifted the neighboring grass
+            // surface onto a slab and converted its support block to dirt.
+            if (neighbor.is(Blocks.DIRT) && isGeneratedGrassSlab(level.getBlockState(neighborPos.above()))) {
+                return ModBlocksRegistry.GRASS_SLAB.get();
+            }
+        }
+        return slab;
+    }
+
+    private static boolean isGeneratedGrassSlab(BlockState state) {
+        return state.is(ModBlocksRegistry.GRASS_SLAB.get()) && state.getValue(CustomSlab.GENERATED)
+                && !state.getValue(SlabBlock.WATERLOGGED);
+    }
+
+    private void placeBottomSlab(WorldGenLevel level, BlockPos pos, Block slab) {
         BlockPos blockBelowPos = pos.below();
         BlockPos blockAbovePos = pos.above();
         BlockState blockAboveState = level.getBlockState(blockAbovePos);
         BlockState currentBlockState = level.getBlockState(pos);
-        BlockState blockBelowState = level.getBlockState(blockBelowPos);
 
         // fix for slabs over already placed slabs across chunk boundaries
         if (currentBlockState.getBlock() instanceof SlabBlock) return;
-
-        // Retrieve the slab type based on the block below the current position
-        Block slab = ModSlabsMap.getSlabForBlock(blockBelowState.getBlock());
-        if (slab == null) return;
 
         BlockState slabState = slab.defaultBlockState();
 
