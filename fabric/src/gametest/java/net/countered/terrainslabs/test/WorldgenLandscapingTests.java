@@ -176,14 +176,14 @@ public class WorldgenLandscapingTests implements FabricGameTest {
                     BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
                             .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
                     level.setBlock(target, dirt, 2);
-                    Blocks.GRASS_BLOCK.randomTick(level.getBlockState(source), level, source, eastNeighborRandom());
+                    level.getBlockState(source).randomTick(level, source, eastNeighborRandom());
                     BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
                             .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
                     helper.assertTrue(level.getBlockState(target).equals(expected), "Full grass failed to spread onto " + dirt);
                 }
             }
             level.setBlock(target, Blocks.DIRT.defaultBlockState(), 2);
-            Blocks.GRASS_BLOCK.randomTick(level.getBlockState(source), level, source, eastNeighborRandom());
+            level.getBlockState(source).randomTick(level, source, eastNeighborRandom());
             helper.assertTrue(level.getBlockState(target).is(Blocks.GRASS_BLOCK), "Ordinary full-block spreading must still work");
             helper.succeed();
         });
@@ -205,7 +205,7 @@ public class WorldgenLandscapingTests implements FabricGameTest {
                     BlockState dirt = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
                             .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
                     level.setBlock(target, dirt, 2);
-                    grass.getBlock().randomTick(grass, level, source, eastNeighborRandom());
+                    grass.randomTick(level, source, eastNeighborRandom());
                     BlockState expected = ModBlocksRegistry.GRASS_SLAB.get().defaultBlockState()
                             .setValue(SlabBlock.TYPE, type).setValue(CustomSlab.GENERATED, generated);
                     helper.assertTrue(level.getBlockState(target).equals(expected), "Slab grass changed target shape or marker: " + dirt);
@@ -230,12 +230,12 @@ public class WorldgenLandscapingTests implements FabricGameTest {
                         .setValue(SlabBlock.WATERLOGGED, true).setValue(CustomSlab.GENERATED, true);
                 level.setBlock(target.above(), Blocks.AIR.defaultBlockState(), 2);
                 level.setBlock(target, wet, 2);
-                grass.getBlock().randomTick(grass, level, source, eastNeighborRandom());
+                grass.randomTick(level, source, eastNeighborRandom());
                 helper.assertTrue(level.getBlockState(target).equals(wet), "Grass spread onto a waterlogged slab");
                 BlockState dry = wet.setValue(SlabBlock.WATERLOGGED, false);
                 level.setBlock(target, dry, 2);
                 level.setBlock(target.above(), Blocks.STONE.defaultBlockState(), 2);
-                grass.getBlock().randomTick(grass, level, source, eastNeighborRandom());
+                grass.randomTick(level, source, eastNeighborRandom());
                 helper.assertTrue(level.getBlockState(target).equals(dry), "Grass spread under a solid cover");
             }
             helper.succeed();
@@ -254,7 +254,7 @@ public class WorldgenLandscapingTests implements FabricGameTest {
                             .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, waterlogged)
                             .setValue(CustomSlab.GENERATED, generated);
                     level.setBlock(pos, grass, 2);
-                    grass.getBlock().randomTick(grass, level, pos, eastNeighborRandom());
+                    grass.randomTick(level, pos, eastNeighborRandom());
                     BlockState expected = ModBlocksRegistry.DIRT_SLAB.get().defaultBlockState()
                             .setValue(SlabBlock.TYPE, type).setValue(SlabBlock.WATERLOGGED, waterlogged)
                             .setValue(CustomSlab.GENERATED, generated);
